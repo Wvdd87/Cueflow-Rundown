@@ -115,6 +115,8 @@ export function RundownEditor({
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() =>
     loadSet(rundown.id, 'collapsedGroups')
   )
+  // Start with default (PN last) — matches SSR; then sync from localStorage after hydration.
+  const [privateNotesIndex, setPrivateNotesIndex] = useState<number>(9999)
   const lastSelectedRef = useRef<string | null>(null)
 
   useEffect(() => {
@@ -125,6 +127,16 @@ export function RundownEditor({
     if (typeof window === 'undefined') return
     window.localStorage.setItem(lsKey(rundown.id, 'collapsedGroups'), JSON.stringify([...collapsedGroups]))
   }, [collapsedGroups, rundown.id])
+  useEffect(() => {
+    const raw = window.localStorage.getItem(lsKey(rundown.id, 'privateNotesIndex'))
+    if (raw !== null) {
+      const n = parseInt(raw, 10)
+      if (!isNaN(n)) setPrivateNotesIndex(n)
+    }
+  }, [rundown.id])
+  useEffect(() => {
+    window.localStorage.setItem(lsKey(rundown.id, 'privateNotesIndex'), String(privateNotesIndex))
+  }, [privateNotesIndex, rundown.id])
 
   const visibleColumns = useMemo(
     () => columns.filter((c) => !hiddenCols.has(c.id)),
@@ -443,6 +455,7 @@ export function RundownEditor({
         onJump={live.jumpTo}
         privateNote={privateNotes[cue.id] ?? ''}
         onPrivateNoteChange={handlePrivateNoteChange}
+        privateNotesIndex={privateNotesIndex}
         isFirst={cue.id === firstCueId}
         nextAutoStart={nextAutoStartOf[cue.id] ?? null}
         onToggleNextAutoStart={() => toggleNextAutoStart(cue.id)}
@@ -488,6 +501,8 @@ export function RundownEditor({
             />
           )}
 
+          {/* Shared horizontal scroll wrapper — keeps headers and rows in sync */}
+          <div className="flex-1 flex flex-col overflow-x-auto overflow-y-hidden">
           <ColumnHeaders
             columns={columns}
             visibleColumns={visibleColumns}
@@ -496,6 +511,8 @@ export function RundownEditor({
             onColumnsChange={setColumns}
             onToggleHide={toggleHideColumn}
             onUnhideAll={unhideAllColumns}
+            privateNotesIndex={privateNotesIndex}
+            onPrivateNotesIndexChange={setPrivateNotesIndex}
           />
 
           <div
@@ -570,6 +587,7 @@ export function RundownEditor({
               )}
             </div>
           </div>
+          </div>{/* end overflow-x-auto wrapper */}
         </div>
 
         {/* Footer summary */}

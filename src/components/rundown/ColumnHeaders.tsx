@@ -54,7 +54,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { PRIVATE_NOTES_WIDTH } from './layout'
+import { PRIVATE_NOTES_WIDTH, TITLE_COL_WIDTH, PRIVATE_NOTES_ID } from './layout'
 import {
   OptionsEditor,
   rowsToOptions,
@@ -81,6 +81,15 @@ interface ColumnHeadersProps {
   onColumnsChange: (cols: Column[]) => void
   onToggleHide: (id: string) => void
   onUnhideAll: () => void
+  privateNotesIndex: number
+  onPrivateNotesIndexChange: (idx: number) => void
+}
+
+function buildMergedIds(cols: Column[], pnIdx: number): string[] {
+  const ids = cols.map((c) => c.id)
+  const insertAt = Math.min(Math.max(0, pnIdx), ids.length)
+  ids.splice(insertAt, 0, PRIVATE_NOTES_ID)
+  return ids
 }
 
 export function ColumnHeaders({
@@ -91,6 +100,8 @@ export function ColumnHeaders({
   onColumnsChange,
   onToggleHide,
   onUnhideAll,
+  privateNotesIndex,
+  onPrivateNotesIndexChange,
 }: ColumnHeadersProps) {
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
@@ -202,22 +213,37 @@ export function ColumnHeaders({
     document.addEventListener('mouseup', onUp)
   }
 
-  // --- Reorder (drag column headers) ---
+  // --- Reorder (drag column headers, including private notes) ---
   async function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event
     if (!over || active.id === over.id) return
-    const oldIndex = visibleColumns.findIndex((c) => c.id === active.id)
-    const newIndex = visibleColumns.findIndex((c) => c.id === over.id)
-    if (oldIndex < 0 || newIndex < 0) return
-    const reorderedVisible = arrayMove(visibleColumns, oldIndex, newIndex)
-    const hidden = columns.filter((c) => !visibleColumns.some((v) => v.id === c.id))
-    const fullOrder = [...reorderedVisible, ...hidden].map((c, i) => ({
-      ...c,
-      position: i,
-    }))
-    onColumnsChange(fullOrder)
-    const result = await reorderColumns(rundownId, fullOrder.map((c) => c.id))
-    if (result.error) toast.error(result.error)
+
+    const mergedIds = buildMergedIds(visibleColumns, privateNotesIndex)
+    const oldIdx = mergedIds.indexOf(active.id as string)
+    const newIdx = mergedIds.indexOf(over.id as string)
+    if (oldIdx < 0 || newIdx < 0) return
+
+    const newMergedIds = arrayMove(mergedIds, oldIdx, newIdx)
+
+    // Update private notes position if it moved
+    const pnNewIdx = newMergedIds.indexOf(PRIVATE_NOTES_ID)
+    if (pnNewIdx !== privateNotesIndex) {
+      onPrivateNotesIndexChange(pnNewIdx)
+    }
+
+    // Update dynamic column order if it changed
+    const newColIds = newMergedIds.filter((id) => id !== PRIVATE_NOTES_ID)
+    const oldColIds = visibleColumns.map((c) => c.id)
+    if (JSON.stringify(newColIds) !== JSON.stringify(oldColIds)) {
+      const hidden = columns.filter((c) => !visibleColumns.some((v) => v.id === c.id))
+      const reorderedVisible = newColIds
+        .map((id) => visibleColumns.find((c) => c.id === id))
+        .filter((c): c is Column => !!c)
+      const fullOrder = [...reorderedVisible, ...hidden].map((c, i) => ({ ...c, position: i }))
+      onColumnsChange(fullOrder)
+      const result = await reorderColumns(rundownId, fullOrder.map((c) => c.id))
+      if (result.error) toast.error(result.error)
+    }
   }
 
   return (
@@ -251,48 +277,46 @@ export function ColumnHeaders({
 
       {/* Title */}
       <div
-        style={{ width: FIXED_COL_WIDTHS.title }}
-        className="grow px-3 py-2 text-xs font-medium text-zinc-500 uppercase tracking-wider flex items-center min-w-0"
+        style={{ width: TITLE_COL_WIDTH }}
+        className="shrink-0 px-3 py-2 text-xs font-medium text-zinc-500 uppercase tracking-wider flex items-center"
       >
         Title
       </div>
 
-      {/* Dynamic columns (sortable) */}
+      {/* Dynamic columns + Private Notes (all sortable together) */}
       <DndContext id="column-headers-dnd" sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext
-          items={visibleColumns.map((c) => c.id)}
+          items={buildMergedIds(visibleColumns, privateNotesIndex)}
           strategy={horizontalListSortingStrategy}
         >
-          {visibleColumns.map((col) => (
-            <SortableColumnHeader
-              key={col.id}
-              col={col}
-              isRenaming={renamingId === col.id}
-              renameValue={renameValue}
-              onRenameChange={setRenameValue}
-              onRenameSubmit={() => handleRename(col.id)}
-              onRenameCancel={() => setRenamingId(null)}
-              onStartRename={() => { setRenamingId(col.id); setRenameValue(col.name) }}
-              onEditOptions={() => {
-                setEditCol(col)
-                setEditRows(optionsToRows(col.options, col.option_colors))
-              }}
-              onHide={() => onToggleHide(col.id)}
-              onDelete={() => handleDelete(col.id)}
-              onResizeStart={(e) => startResize(e, col)}
-            />
-          ))}
+          {buildMergedIds(visibleColumns, privateNotesIndex).map((id) => {
+            if (id === PRIVATE_NOTES_ID) {
+              return <SortablePrivateNotesHeader key={PRIVATE_NOTES_ID} />
+            }
+            const col = visibleColumns.find((c) => c.id === id)
+            if (!col) return null
+            return (
+              <SortableColumnHeader
+                key={col.id}
+                col={col}
+                isRenaming={renamingId === col.id}
+                renameValue={renameValue}
+                onRenameChange={setRenameValue}
+                onRenameSubmit={() => handleRename(col.id)}
+                onRenameCancel={() => setRenamingId(null)}
+                onStartRename={() => { setRenamingId(col.id); setRenameValue(col.name) }}
+                onEditOptions={() => {
+                  setEditCol(col)
+                  setEditRows(optionsToRows(col.options, col.option_colors))
+                }}
+                onHide={() => onToggleHide(col.id)}
+                onDelete={() => handleDelete(col.id)}
+                onResizeStart={(e) => startResize(e, col)}
+              />
+            )
+          })}
         </SortableContext>
       </DndContext>
-
-      {/* Private notes (pinned, per-user) */}
-      <div
-        style={{ width: PRIVATE_NOTES_WIDTH }}
-        className="shrink-0 flex items-center gap-1.5 border-l border-amber-900/30 bg-amber-950/10 px-2 py-2 text-xs font-medium text-amber-600/70 uppercase tracking-wider"
-        title="Private notes — visible only to you"
-      >
-        <Lock className="w-3 h-3" /> Private notes
-      </div>
 
       {/* Restore hidden columns */}
       {hiddenCount > 0 && (
@@ -568,6 +592,38 @@ function SortableColumnHeader({
         title="Drag to resize"
         className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-blue-500/60 transition-colors"
       />
+    </div>
+  )
+}
+
+function SortablePrivateNotesHeader() {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: PRIVATE_NOTES_ID })
+
+  const style = {
+    width: PRIVATE_NOTES_WIDTH,
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.6 : 1,
+  }
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="shrink-0 flex items-center gap-1.5 border-l border-amber-900/30 bg-amber-950/10 px-2 py-2 text-xs font-medium text-amber-600/70 uppercase tracking-wider"
+      title="Private notes — visible only to you. Drag to reorder."
+    >
+      <button
+        {...attributes}
+        {...listeners}
+        data-testid="pn-header-grip"
+        title="Drag to reorder"
+        className="text-amber-800/60 hover:text-amber-500 cursor-grab active:cursor-grabbing -ml-0.5 mr-0.5"
+      >
+        <GripVertical className="w-3 h-3" />
+      </button>
+      <Lock className="w-3 h-3" /> Private notes
     </div>
   )
 }

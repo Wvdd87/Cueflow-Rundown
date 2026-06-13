@@ -25,7 +25,7 @@ import {
 import { RichTextCell } from './RichTextCell'
 import { DropdownCell } from './DropdownCell'
 import { PrivateNoteCell } from './PrivateNoteCell'
-import { PRIVATE_NOTES_WIDTH } from './layout'
+import { PRIVATE_NOTES_WIDTH, TITLE_COL_WIDTH, PRIVATE_NOTES_ID } from './layout'
 import { formatDuration, parseDurationInput, formatMsToTime, parseTimeToMs } from '@/lib/timing'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -63,6 +63,7 @@ interface CueRowProps {
   isFirst: boolean
   nextAutoStart: boolean | null
   onToggleNextAutoStart: () => void
+  privateNotesIndex: number
 }
 
 export function CueRow({
@@ -88,6 +89,7 @@ export function CueRow({
   isFirst,
   nextAutoStart,
   onToggleNextAutoStart,
+  privateNotesIndex,
 }: CueRowProps) {
   const [editingDuration, setEditingDuration] = useState(false)
   const [durationInput, setDurationInput] = useState('')
@@ -491,7 +493,7 @@ export function CueRow({
         </div>
 
         {/* Title + subtitle */}
-        <div className="group/title grow min-w-0 flex flex-col justify-center px-3 py-1">
+        <div className="group/title shrink-0 flex flex-col justify-center px-3 py-1" style={{ width: TITLE_COL_WIDTH }}>
           {editingTitle ? (
             <input
               autoFocus
@@ -544,47 +546,59 @@ export function CueRow({
           )}
         </div>
 
-        {/* Dynamic cells */}
-        {columns.map((col) => (
-          <div
-            key={col.id}
-            style={{ width: col.width }}
-            className="shrink-0 border-l border-zinc-800/60 flex items-center px-1"
-          >
-            {col.col_type === 'dropdown' ? (
-              <DropdownCell
-                cueId={cue.id}
-                columnId={col.id}
-                rundownId={rundownId}
-                options={col.options ?? []}
-                optionColors={col.option_colors}
-                value={cells[`${cue.id}:${col.id}`] ?? ''}
-                onContentChange={onCellChange}
-              />
-            ) : (
-              <RichTextCell
-                cueId={cue.id}
-                columnId={col.id}
-                rundownId={rundownId}
-                initialContent={cells[`${cue.id}:${col.id}`] ?? ''}
-                onContentChange={onCellChange}
-              />
-            )}
-          </div>
-        ))}
-
-        {/* Private notes (pinned, per-user) */}
-        <div
-          style={{ width: PRIVATE_NOTES_WIDTH }}
-          className="shrink-0 border-l border-amber-900/30 bg-amber-950/10 flex items-center px-1"
-        >
-          <PrivateNoteCell
-            cueId={cue.id}
-            rundownId={rundownId}
-            value={privateNote}
-            onChange={onPrivateNoteChange}
-          />
-        </div>
+        {/* Dynamic cells + Private Notes, interleaved by privateNotesIndex */}
+        {(() => {
+          const insertAt = Math.min(Math.max(0, privateNotesIndex), columns.length)
+          const mergedIds = columns.map((c) => c.id as string)
+          mergedIds.splice(insertAt, 0, PRIVATE_NOTES_ID)
+          return mergedIds.map((id) => {
+            if (id === PRIVATE_NOTES_ID) {
+              return (
+                <div
+                  key={PRIVATE_NOTES_ID}
+                  style={{ width: PRIVATE_NOTES_WIDTH }}
+                  className="shrink-0 border-l border-amber-900/30 bg-amber-950/10 flex items-center px-1"
+                >
+                  <PrivateNoteCell
+                    cueId={cue.id}
+                    rundownId={rundownId}
+                    value={privateNote}
+                    onChange={onPrivateNoteChange}
+                  />
+                </div>
+              )
+            }
+            const col = columns.find((c) => c.id === id)
+            if (!col) return null
+            return (
+              <div
+                key={col.id}
+                style={{ width: col.width }}
+                className="shrink-0 border-l border-zinc-800/60 flex items-center px-1"
+              >
+                {col.col_type === 'dropdown' ? (
+                  <DropdownCell
+                    cueId={cue.id}
+                    columnId={col.id}
+                    rundownId={rundownId}
+                    options={col.options ?? []}
+                    optionColors={col.option_colors}
+                    value={cells[`${cue.id}:${col.id}`] ?? ''}
+                    onContentChange={onCellChange}
+                  />
+                ) : (
+                  <RichTextCell
+                    cueId={cue.id}
+                    columnId={col.id}
+                    rundownId={rundownId}
+                    initialContent={cells[`${cue.id}:${col.id}`] ?? ''}
+                    onContentChange={onCellChange}
+                  />
+                )}
+              </div>
+            )
+          })
+        })()}
       </div>
     </div>
   )
