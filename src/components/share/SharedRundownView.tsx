@@ -269,10 +269,10 @@ export function SharedRundownView({ data }: { data: SharedData }) {
           {formatDuration(cue.duration_ms)}
         </div>
         <div className="w-[240px] grow min-w-0 flex flex-col justify-center px-3 py-1.5">
-          <span className="text-sm text-white truncate">
+          <span className="text-sm text-white break-words">
             {cue.title || <span className="text-zinc-600 italic">Untitled</span>}
           </span>
-          {cue.subtitle && <span className="text-xs text-zinc-500 truncate">{cue.subtitle}</span>}
+          {cue.subtitle && <span className="text-xs text-zinc-500 break-words">{cue.subtitle}</span>}
         </div>
         {renderCells(cue.id)}
       </div>

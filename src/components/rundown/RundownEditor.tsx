@@ -139,6 +139,12 @@ export function RundownEditor({
   )
   // Start with default (PN last) — matches SSR; then sync from localStorage after hydration.
   const [privateNotesIndex, setPrivateNotesIndex] = useState<number>(9999)
+  const [titleWidth, setTitleWidth] = useState<number>(() => {
+    if (typeof window === 'undefined') return 240
+    const raw = window.localStorage.getItem(lsKey(rundown.id, 'titleWidth'))
+    const n = raw ? parseInt(raw, 10) : NaN
+    return isNaN(n) ? 240 : n
+  })
   const lastSelectedRef = useRef<string | null>(null)
 
   useEffect(() => {
@@ -159,6 +165,10 @@ export function RundownEditor({
   useEffect(() => {
     window.localStorage.setItem(lsKey(rundown.id, 'privateNotesIndex'), String(privateNotesIndex))
   }, [privateNotesIndex, rundown.id])
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(lsKey(rundown.id, 'titleWidth'), String(titleWidth))
+  }, [titleWidth, rundown.id])
 
   const visibleColumns = useMemo(
     () => columns.filter((c) => !hiddenCols.has(c.id)),
@@ -534,6 +544,7 @@ export function RundownEditor({
         isFirst={cue.id === firstCueId}
         nextAutoStart={nextAutoStartOf[cue.id] ?? null}
         onToggleNextAutoStart={() => toggleNextAutoStart(cue.id)}
+        titleWidth={titleWidth}
       />
     )
   }
@@ -577,8 +588,9 @@ export function RundownEditor({
             />
           )}
 
-          {/* Shared horizontal scroll wrapper — keeps headers and rows in sync */}
-          <div className="flex-1 flex flex-col overflow-x-auto overflow-y-hidden">
+          {/* Single scroll container — header is sticky so it always aligns with rows */}
+          <div className="flex-1 overflow-auto min-h-0">
+          <div className="sticky top-0 z-10">
           <ColumnHeaders
             columns={columns}
             visibleColumns={visibleColumns}
@@ -589,10 +601,12 @@ export function RundownEditor({
             onUnhideAll={unhideAllColumns}
             privateNotesIndex={privateNotesIndex}
             onPrivateNotesIndexChange={setPrivateNotesIndex}
+            titleWidth={titleWidth}
+            onTitleWidthChange={setTitleWidth}
           />
+          </div>
 
           <div
-            className="flex-1 overflow-y-auto"
             onClick={(e) => {
               if (e.target === e.currentTarget) setSelectedIds(new Set())
             }}
@@ -696,7 +710,7 @@ export function RundownEditor({
               )}
             </div>
           </div>
-          </div>{/* end overflow-x-auto wrapper */}
+          </div>{/* end single scroll container */}
         </div>
 
         {/* Footer summary */}

@@ -83,6 +83,8 @@ interface ColumnHeadersProps {
   onUnhideAll: () => void
   privateNotesIndex: number
   onPrivateNotesIndexChange: (idx: number) => void
+  titleWidth: number
+  onTitleWidthChange: (w: number) => void
 }
 
 function buildMergedIds(cols: Column[], pnIdx: number): string[] {
@@ -102,6 +104,8 @@ export function ColumnHeaders({
   onUnhideAll,
   privateNotesIndex,
   onPrivateNotesIndexChange,
+  titleWidth,
+  onTitleWidthChange,
 }: ColumnHeadersProps) {
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
@@ -190,7 +194,7 @@ export function ColumnHeaders({
     }
   }
 
-  // --- Resize ---
+  // --- Resize dynamic columns ---
   const resizeRef = useRef<{ id: string; width: number } | null>(null)
   function startResize(e: React.MouseEvent, col: Column) {
     e.preventDefault()
@@ -208,6 +212,23 @@ export function ColumnHeaders({
       const r = resizeRef.current
       if (r) updateColumnWidth(r.id, r.width, rundownId)
       resizeRef.current = null
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  }
+
+  // --- Resize title column ---
+  function startTitleResize(e: React.MouseEvent) {
+    e.preventDefault()
+    e.stopPropagation()
+    const startX = e.clientX
+    const startW = titleWidth
+    function onMove(ev: MouseEvent) {
+      onTitleWidthChange(Math.max(MIN_COL_WIDTH, startW + (ev.clientX - startX)))
+    }
+    function onUp() {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
     }
     document.addEventListener('mousemove', onMove)
     document.addEventListener('mouseup', onUp)
@@ -275,12 +296,17 @@ export function ColumnHeaders({
         Dur.
       </div>
 
-      {/* Title */}
+      {/* Title — resizable */}
       <div
-        style={{ width: TITLE_COL_WIDTH }}
-        className="shrink-0 px-3 py-2 text-xs font-medium text-zinc-500 uppercase tracking-wider flex items-center"
+        style={{ width: titleWidth }}
+        className="relative shrink-0 px-3 py-2 text-xs font-medium text-zinc-500 uppercase tracking-wider flex items-center"
       >
         Title
+        <div
+          onMouseDown={startTitleResize}
+          title="Drag to resize"
+          className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-blue-500/60 transition-colors"
+        />
       </div>
 
       {/* Dynamic columns + Private Notes (all sortable together) */}

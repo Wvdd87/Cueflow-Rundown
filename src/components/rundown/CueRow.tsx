@@ -67,6 +67,7 @@ interface CueRowProps {
   onToggleNextAutoStart: () => void
   privateNotesIndex: number
   timeFormat?: TimeDisplay
+  titleWidth?: number
 }
 
 export function CueRow({
@@ -95,6 +96,7 @@ export function CueRow({
   onToggleNextAutoStart,
   privateNotesIndex,
   timeFormat = 'auto',
+  titleWidth = TITLE_COL_WIDTH,
 }: CueRowProps) {
   const [editingDuration, setEditingDuration] = useState(false)
   const [durationInput, setDurationInput] = useState('')
@@ -408,27 +410,20 @@ export function CueRow({
               className="w-full bg-zinc-800 border border-zinc-600 rounded px-1 py-0.5 text-xs text-white font-mono outline-none focus:ring-1 focus:ring-zinc-500"
             />
           ) : isHard || isFirst ? (
-            <>
-              {showStruck && (
-                <span className="text-[10px] font-mono tabular-nums text-zinc-600 line-through leading-none">
-                  {naturalStartLabel}
-                </span>
+            <button
+              onClick={startStartEdit}
+              className={cn(
+                'flex items-center gap-1 text-xs font-mono tabular-nums transition-colors text-left',
+                isActive
+                  ? 'text-red-400 font-semibold'
+                  : isHard
+                    ? 'text-amber-400 hover:text-amber-300'
+                    : 'text-zinc-400 hover:text-zinc-200'
               )}
-              <button
-                onClick={startStartEdit}
-                className={cn(
-                  'flex items-center gap-1 text-xs font-mono tabular-nums transition-colors text-left',
-                  isActive
-                    ? 'text-red-400 font-semibold'
-                    : isHard
-                      ? 'text-amber-400 hover:text-amber-300'
-                      : 'text-zinc-400 hover:text-zinc-200'
-                )}
-              >
-                {isHard && <Pin className="w-2.5 h-2.5 shrink-0 -rotate-45 fill-current" />}
-                {startTimeLabel}
-              </button>
-            </>
+            >
+              {isHard && <Pin className="w-2.5 h-2.5 shrink-0 -rotate-45 fill-current" />}
+              {startTimeLabel}
+            </button>
           ) : (
             <span
               className={cn(
@@ -483,7 +478,7 @@ export function CueRow({
               }}
               className="w-full bg-zinc-800 border border-zinc-600 rounded px-1.5 py-0.5 text-xs text-white font-mono outline-none focus:ring-1 focus:ring-zinc-500"
             />
-          ) : isActive && liveElapsedMs != null ? (
+          ) : isActive && liveRemainingMs != null ? (
             <>
               <span className="text-[10px] font-mono tabular-nums text-zinc-600 leading-none">
                 {formatDuration(cue.duration_ms)}
@@ -494,7 +489,7 @@ export function CueRow({
                   liveOvertime ? 'text-red-400' : 'text-emerald-400'
                 )}
               >
-                {formatDuration(liveElapsedMs)}
+                {liveOvertime ? '+' : ''}{formatDuration(Math.abs(liveRemainingMs))}
               </span>
             </>
           ) : (
@@ -508,7 +503,7 @@ export function CueRow({
         </div>
 
         {/* Title + subtitle */}
-        <div className="group/title shrink-0 flex flex-col justify-center px-3 py-1" style={{ width: TITLE_COL_WIDTH }}>
+        <div className="group/title shrink-0 flex flex-col justify-center px-3 py-1" style={{ width: titleWidth }}>
           {editingTitle ? (
             <input
               autoFocus
@@ -524,7 +519,7 @@ export function CueRow({
           ) : (
             <button
               onClick={() => setEditingTitle(true)}
-              className="text-sm text-left w-full truncate transition-colors"
+              className="text-sm text-left w-full break-words transition-colors"
               style={{ color: cue.background_color ? '#fff' : undefined }}
             >
               {cue.title || <span className="text-zinc-700 italic">Untitled cue</span>}
@@ -547,14 +542,14 @@ export function CueRow({
           ) : cue.subtitle ? (
             <button
               onClick={() => setEditingSubtitle(true)}
-              className="text-xs text-left w-full truncate text-zinc-500 hover:text-zinc-400 transition-colors"
+              className="text-xs text-left w-full break-words text-zinc-500 hover:text-zinc-400 transition-colors"
             >
               {cue.subtitle}
             </button>
           ) : (
             <button
               onClick={() => setEditingSubtitle(true)}
-              className="text-xs text-left w-full truncate text-zinc-700 hover:text-zinc-500 opacity-0 group-hover/title:opacity-100 transition-opacity italic"
+              className="text-xs text-left w-full text-zinc-700 hover:text-zinc-500 opacity-0 group-hover/title:opacity-100 transition-opacity italic"
             >
               Add a subtitle…
             </button>
