@@ -75,14 +75,21 @@ export function buildCueLayout(cues: Cue[]): CueLayout {
   for (const t of topLevel) {
     if (t.cue_type === 'heading') {
       const children = childrenByGroup.get(t.id) ?? []
-      // Headings get no number — children continue the flat counter
-      numberOf[t.id] = ''
-      children.forEach((ch) => {
+      if (children.length > 0) {
+        // GROUP: numbered item whose children get sub-numbers (n.1, n.2, …)
         n++
-        numberOf[ch.id] = String(n)
-      })
-      items.push({ type: 'group', heading: t, number: '', children })
-      docOrder.push(t, ...children)
+        numberOf[t.id] = String(n)
+        children.forEach((ch, i) => {
+          numberOf[ch.id] = `${n}.${i + 1}`
+        })
+        items.push({ type: 'group', heading: t, number: String(n), children })
+        docOrder.push(t, ...children)
+      } else {
+        // STANDALONE HEADING: section divider — no number, counter does not advance
+        numberOf[t.id] = ''
+        items.push({ type: 'group', heading: t, number: '', children: [] })
+        docOrder.push(t)
+      }
     } else {
       n++
       numberOf[t.id] = String(n)
