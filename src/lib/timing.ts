@@ -15,12 +15,35 @@ export function parseTimeToMs(time: string): number {
   return (h * 3600 + m * 60 + s) * 1000
 }
 
+export type TimeDisplay = 'auto' | '24h' | '12h' | '12h_no_ampm'
+
 /** Format ms-from-midnight to "HH:MM:SS" */
 export function formatMsToTime(ms: number): string {
   const total = Math.floor(Math.abs(ms) / 1000)
   const h = Math.floor(total / 3600)
   const m = Math.floor((total % 3600) / 60)
   const s = total % 60
+  return [h, m, s].map((v) => String(v).padStart(2, '0')).join(':')
+}
+
+/**
+ * Format ms-from-midnight according to the rundown's time_display setting.
+ * '12h' → "1:30:10 PM", '12h_no_ampm' → "1:30:10", everything else → "HH:MM:SS"
+ */
+export function formatMsToTimeDisplay(ms: number, format: TimeDisplay = 'auto'): string {
+  const total = Math.floor(Math.abs(ms) / 1000)
+  const h = Math.floor(total / 3600)
+  const m = Math.floor((total % 3600) / 60)
+  const s = total % 60
+
+  if (format === '12h' || format === '12h_no_ampm') {
+    const h12 = h % 12 || 12
+    const ampm = h < 12 ? 'AM' : 'PM'
+    const mm = String(m).padStart(2, '0')
+    const ss = String(s).padStart(2, '0')
+    return format === '12h' ? `${h12}:${mm}:${ss} ${ampm}` : `${h12}:${mm}:${ss}`
+  }
+
   return [h, m, s].map((v) => String(v).padStart(2, '0')).join(':')
 }
 

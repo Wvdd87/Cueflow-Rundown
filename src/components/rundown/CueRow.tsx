@@ -11,6 +11,7 @@ import {
   Palette,
   Pin,
   ChevronDown,
+  Heading as HeadingIcon,
 } from 'lucide-react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -26,11 +27,11 @@ import { RichTextCell } from './RichTextCell'
 import { DropdownCell } from './DropdownCell'
 import { PrivateNoteCell } from './PrivateNoteCell'
 import { PRIVATE_NOTES_WIDTH, TITLE_COL_WIDTH, PRIVATE_NOTES_ID } from './layout'
-import { formatDuration, parseDurationInput, formatMsToTime, parseTimeToMs } from '@/lib/timing'
+import { formatDuration, parseDurationInput, formatMsToTime, formatMsToTimeDisplay, parseTimeToMs } from '@/lib/timing'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import type { Cue, Column } from '@/lib/supabase/types'
-import type { CueTimingOutput } from '@/lib/timing'
+import type { CueTimingOutput, TimeDisplay } from '@/lib/timing'
 
 const CUE_COLORS = [
   null,
@@ -51,6 +52,7 @@ interface CueRowProps {
   onSelect: (id: string, mods: SelectMods) => void
   onDelete: (id: string) => void
   onUpdate: (id: string, updates: Partial<Cue>) => void
+  onConvertToHeading: (id: string) => void
   onCellChange: (cueId: string, columnId: string, content: string) => void
   live: boolean
   isActive: boolean
@@ -64,6 +66,7 @@ interface CueRowProps {
   nextAutoStart: boolean | null
   onToggleNextAutoStart: () => void
   privateNotesIndex: number
+  timeFormat?: TimeDisplay
 }
 
 export function CueRow({
@@ -77,6 +80,7 @@ export function CueRow({
   onSelect,
   onDelete,
   onUpdate,
+  onConvertToHeading,
   onCellChange,
   live,
   isActive,
@@ -90,6 +94,7 @@ export function CueRow({
   nextAutoStart,
   onToggleNextAutoStart,
   privateNotesIndex,
+  timeFormat = 'auto',
 }: CueRowProps) {
   const [editingDuration, setEditingDuration] = useState(false)
   const [durationInput, setDurationInput] = useState('')
@@ -194,12 +199,12 @@ export function CueRow({
     await updateCue(cue.id, rundownId, { start_type: 'hard', start_time_override: override })
   }
 
-  const startTimeLabel = formatMsToTime(cue.calculated_start_ms)
+  const startTimeLabel = formatMsToTimeDisplay(cue.calculated_start_ms, timeFormat)
   const isHard = cue.start_type === 'hard'
   const hasGap = isHard && cue.gap_ms > 0
   const hasOverlap = isHard && cue.gap_ms < 0
   // For a hard cue, the natural (cascade) start it would have if soft = current − gap
-  const naturalStartLabel = formatMsToTime(cue.calculated_start_ms - cue.gap_ms)
+  const naturalStartLabel = formatMsToTimeDisplay(cue.calculated_start_ms - cue.gap_ms, timeFormat)
   const showStruck = isHard && cue.gap_ms !== 0
 
   // Live overtime flag for the active cue
@@ -283,6 +288,7 @@ export function CueRow({
               render={
                 <button
                   title="Cue options"
+                  data-testid="cue-settings-btn"
                   className="p-1 rounded text-zinc-600 hover:text-zinc-300 hover:bg-zinc-800 transition-colors"
                 />
               }
@@ -322,9 +328,18 @@ export function CueRow({
                 </div>
               </div>
 
+              <DropdownMenuItem
+                onClick={() => onConvertToHeading(cue.id)}
+                data-testid="convert-to-heading-menu-item"
+                className="gap-2 text-xs focus:bg-zinc-800 cursor-pointer"
+              >
+                <HeadingIcon className="w-3.5 h-3.5" /> Convert to heading
+              </DropdownMenuItem>
+
               <DropdownMenuSeparator className="bg-zinc-800" />
               <DropdownMenuItem
                 onClick={handleDelete}
+                data-testid="delete-cue-menu-item"
                 className="gap-2 text-xs text-red-400 focus:bg-zinc-800 focus:text-red-400 cursor-pointer"
               >
                 <Trash2 className="w-3.5 h-3.5" /> Delete cue

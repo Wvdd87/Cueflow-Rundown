@@ -49,8 +49,9 @@ interface RundownHeaderProps {
   columns: Column[]
   onPlayClick: () => void
   isLive: boolean
-  onOpenSettings: (tab?: 'mentions' | 'variables') => void
+  onOpenSettings: (tab?: 'mentions' | 'variables' | 'display' | 'numbering') => void
   onResetTiming: () => void
+  onOpenTrash: () => void
 }
 
 export function RundownHeader({
@@ -60,6 +61,7 @@ export function RundownHeader({
   isLive,
   onOpenSettings,
   onResetTiming,
+  onOpenTrash,
 }: RundownHeaderProps) {
   const [name, setName] = useState(rundown.name)
   const [editing, setEditing] = useState(false)
@@ -234,6 +236,13 @@ export function RundownHeader({
               className="gap-2 text-sm focus:bg-zinc-800 cursor-pointer"
             >
               <DollarSign className="w-4 h-4" /> Text Variables
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => onOpenTrash()}
+              className="gap-2 text-sm focus:bg-zinc-800 cursor-pointer"
+              data-testid="open-trash-menu-item"
+            >
+              <Trash2 className="w-4 h-4" /> Trash
             </DropdownMenuItem>
 
             <DropdownMenuSeparator className="bg-zinc-800" />

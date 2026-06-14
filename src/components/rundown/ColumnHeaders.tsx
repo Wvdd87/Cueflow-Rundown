@@ -548,7 +548,10 @@ function SortableColumnHeader({
           <DropdownMenu>
             <DropdownMenuTrigger
               render={
-                <button className="opacity-0 group-hover/col:opacity-100 transition-opacity p-0.5 rounded text-zinc-500 hover:text-zinc-300" />
+                <button
+                  data-testid="column-menu-btn"
+                  className="opacity-0 group-hover/col:opacity-100 transition-opacity p-0.5 rounded text-zinc-500 hover:text-zinc-300"
+                />
               }
             >
               <MoreHorizontal className="w-3.5 h-3.5" />

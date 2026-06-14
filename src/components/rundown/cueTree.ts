@@ -23,6 +23,27 @@ export interface CueLayout {
 }
 
 /**
+ * Format a raw cue number (e.g. "1", "2.1") using the rundown's numbering settings.
+ * Prefix and digit-padding apply to the top-level integer; sub-cue suffixes are kept as-is.
+ *
+ * Example: raw="2.1", prefix="A-", start=0, digits=2 → "A-01.1"
+ */
+export function formatCueNumber(
+  raw: string,
+  prefix: string,
+  start: number,
+  digits: number
+): string {
+  if (!raw) return ''
+  const parts = raw.split('.')
+  const topNum = parseInt(parts[0], 10)
+  if (isNaN(topNum)) return raw
+  const padded = String(start + topNum - 1).padStart(digits, '0')
+  const formatted = prefix + padded
+  return parts.length > 1 ? `${formatted}.${parts.slice(1).join('.')}` : formatted
+}
+
+/**
  * Turn the flat cue list into a one-level group tree.
  * A "group" is a cue with cue_type='heading'; members reference it via group_id.
  */
@@ -52,16 +73,19 @@ export function buildCueLayout(cues: Cue[]): CueLayout {
   let n = 0
 
   for (const t of topLevel) {
-    n++
-    numberOf[t.id] = String(n)
     if (t.cue_type === 'heading') {
       const children = childrenByGroup.get(t.id) ?? []
-      children.forEach((ch, i) => {
-        numberOf[ch.id] = `${n}.${i + 1}`
+      // Headings get no number — children continue the flat counter
+      numberOf[t.id] = ''
+      children.forEach((ch) => {
+        n++
+        numberOf[ch.id] = String(n)
       })
-      items.push({ type: 'group', heading: t, number: String(n), children })
+      items.push({ type: 'group', heading: t, number: '', children })
       docOrder.push(t, ...children)
     } else {
+      n++
+      numberOf[t.id] = String(n)
       items.push({ type: 'cue', cue: t, number: String(n) })
       docOrder.push(t)
     }

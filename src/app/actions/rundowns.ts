@@ -216,6 +216,44 @@ export async function createFromTemplate(templateId: string) {
   redirect(`/rundown/${newId}`)
 }
 
+export async function moveRundown(id: string, eventId: string | null) {
+  const { supabase, teamId } = await getTeamId()
+
+  const { error } = await supabase
+    .from('rundowns')
+    .update({ event_id: eventId } as never)
+    .eq('id', id)
+    .eq('team_id', teamId)
+
+  if (error) return { error: error.message }
+
+  revalidatePath('/dashboard')
+  return { success: true }
+}
+
+export async function updateRundownSettings(
+  id: string,
+  settings: {
+    time_display?: 'auto' | '24h' | '12h' | '12h_no_ampm'
+    cue_number_prefix?: string
+    cue_number_start?: number
+    cue_number_digits?: number
+  }
+) {
+  const { supabase, teamId } = await getTeamId()
+
+  const { error } = await supabase
+    .from('rundowns')
+    .update(settings as never)
+    .eq('id', id)
+    .eq('team_id', teamId)
+
+  if (error) return { error: error.message }
+
+  revalidatePath(`/rundown/${id}`)
+  return { success: true }
+}
+
 export async function renameRundown(id: string, name: string) {
   const { supabase } = await getTeamId()
 

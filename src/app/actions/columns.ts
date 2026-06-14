@@ -95,13 +95,43 @@ export async function deleteColumn(id: string, rundownId: string) {
 
   const { error } = await supabase
     .from('columns')
-    .delete()
+    .update({ deleted_at: new Date().toISOString() } as never)
     .eq('id', id)
 
   if (error) return { error: error.message }
 
   revalidatePath(`/rundown/${rundownId}`)
   return { success: true }
+}
+
+export async function restoreColumn(id: string, rundownId: string) {
+  const { supabase } = await getRundownAccess(rundownId)
+
+  const { error } = await supabase
+    .from('columns')
+    .update({ deleted_at: null } as never)
+    .eq('id', id)
+
+  if (error) return { error: error.message }
+
+  revalidatePath(`/rundown/${rundownId}`)
+  return { success: true }
+}
+
+export async function getTrashedColumns(rundownId: string): Promise<Column[]> {
+  const { supabase } = await getRundownAccess(rundownId)
+
+  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+  await supabase.from('columns').delete().eq('rundown_id', rundownId).lt('deleted_at', cutoff)
+
+  const { data } = await supabase
+    .from('columns')
+    .select('*')
+    .eq('rundown_id', rundownId)
+    .not('deleted_at', 'is', null)
+    .order('deleted_at', { ascending: false })
+
+  return (data ?? []) as Column[]
 }
 
 export async function reorderColumns(rundownId: string, orderedIds: string[]) {

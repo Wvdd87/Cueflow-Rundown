@@ -40,11 +40,13 @@ export default async function RundownPage({
       .from('cues')
       .select('*')
       .eq('rundown_id', id)
+      .is('deleted_at', null)
       .order('position', { ascending: true }),
     supabase
       .from('columns')
       .select('*')
       .eq('rundown_id', id)
+      .is('deleted_at', null)
       .order('position', { ascending: true }),
     // mentions/variables tables may not exist until schema_phase4.sql is run;
     // a missing-table error simply yields null data here (handled gracefully)

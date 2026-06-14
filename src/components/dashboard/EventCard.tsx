@@ -150,7 +150,7 @@ export function EventCard({ event, rundowns, allEvents }: EventCardProps) {
             </div>
           ) : (
             rundowns.map((rundown) => (
-              <RundownCard key={rundown.id} rundown={rundown} />
+              <RundownCard key={rundown.id} rundown={rundown} allEvents={allEvents} />
             ))
           )}
         </div>

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { useEditor, EditorContent, type Editor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
+import Heading from '@tiptap/extension-heading'
 import { TextStyle, Color } from '@tiptap/extension-text-style'
 import Highlight from '@tiptap/extension-highlight'
 import Placeholder from '@tiptap/extension-placeholder'
@@ -11,11 +12,13 @@ import Image from '@tiptap/extension-image'
 import {
   Bold,
   Italic,
-  Underline as UnderlineIcon,
   List,
-  Highlighter,
+  ListOrdered,
   Image as ImageIcon,
   Paperclip,
+  ChevronDown,
+  Highlighter,
+  RemoveFormatting,
 } from 'lucide-react'
 import { upsertCell } from '@/app/actions/cues'
 import { useRundownData } from './RundownDataContext'
@@ -26,14 +29,12 @@ import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import type { Mention, Variable } from '@/lib/supabase/types'
 
-const TEXT_COLORS = [
-  { label: 'Default', value: null },
-  { label: 'Red', value: '#f87171' },
-  { label: 'Amber', value: '#fbbf24' },
-  { label: 'Green', value: '#34d399' },
-  { label: 'Blue', value: '#60a5fa' },
-  { label: 'Purple', value: '#a78bfa' },
-  { label: 'Pink', value: '#f472b6' },
+// 6 × 4 = 24 preset colors
+const SWATCH_COLORS = [
+  '#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#a855f7',
+  '#fca5a5', '#fdba74', '#fde047', '#86efac', '#93c5fd', '#d8b4fe',
+  '#991b1b', '#9a3412', '#713f12', '#14532d', '#1e3a8a', '#581c87',
+  '#ffffff', '#d1d5db', '#9ca3af', '#4b5563', '#1f2937', '#000000',
 ]
 
 interface RichTextCellProps {
@@ -115,8 +116,7 @@ export function RichTextCell({
   )
 }
 
-/** Resolve $-variable spans to their current value directly in the HTML string
- *  (SSR-safe, deterministic) so re-renders never revert the displayed value. */
+/** Resolve $-variable spans to their current value directly in the HTML string. */
 function resolveVariables(html: string, variableMap: Record<string, string>): string {
   return html.replace(
     /<span([^>]*?)data-mention-suggestion-char="\$"([^>]*?)>([\s\S]*?)<\/span>/g,
@@ -137,8 +137,6 @@ function resolveVariables(html: string, variableMap: Record<string, string>): st
   )
 }
 
-/** Read-only render: variables resolved in-HTML, @-mentions get hover popovers
- *  via event delegation on the stable container. */
 function CellDisplay({
   html,
   variableMap,
@@ -227,7 +225,6 @@ function CellTipTap({
   const savedRef = useRef(false)
   const editorRef = useRef<Editor | null>(null)
 
-  // refs so the suggestion getters always read the latest lists
   const mentionsRef = useRef(mentions)
   mentionsRef.current = mentions
   const variablesRef = useRef(variables)
@@ -235,7 +232,6 @@ function CellTipTap({
   const rundownIdRef = useRef(rundownId)
   rundownIdRef.current = rundownId
 
-  // Upload dropped/pasted/picked files and insert image or attachment nodes
   async function handleFiles(files: File[], insertPos?: number) {
     const editor = editorRef.current
     if (!editor) return
@@ -244,8 +240,6 @@ function CellTipTap({
       const toastId = toast.loading(`Uploading ${file.name}…`)
       try {
         const uploaded = await uploadCellFile(rundownIdRef.current, file)
-        // collapse any node-selection to a cursor so consecutive inserts
-        // append instead of replacing the previously-inserted node
         editor.commands.setTextSelection(editor.state.selection.to)
         if (isImageFile(file)) {
           editor.chain().focus().setImage({ src: uploaded.url, alt: uploaded.name }).run()
@@ -274,9 +268,10 @@ function CellTipTap({
     immediatelyRender: false,
     extensions: [
       StarterKit.configure({ heading: false }),
+      Heading.configure({ levels: [1, 2, 3] }),
       TextStyle,
       Color,
-      Highlight.configure({ multicolor: false }),
+      Highlight.configure({ multicolor: true }),
       Placeholder.configure({ placeholder: 'Type… (@ mention, $ variable)' }),
       Image.configure({ inline: false, allowBase64: false }),
       FileAttachment,
@@ -328,10 +323,9 @@ function CellTipTap({
   useEffect(() => {
     function onDocMouseDown(e: MouseEvent) {
       const target = e.target as Node
-      // ignore clicks inside the cell or inside a suggestion popup (appended to body)
       if (wrapperRef.current && wrapperRef.current.contains(target)) return
       const el = target as HTMLElement
-      if (el?.closest?.('[data-suggestion-popup], .tippy-box')) return
+      if (el?.closest?.('[data-suggestion-popup], .tippy-box, [data-bubble-toolbar]')) return
       save()
     }
     document.addEventListener('mousedown', onDocMouseDown)
@@ -351,128 +345,30 @@ function CellTipTap({
         }
       }}
     >
-      <Toolbar editor={editor} onFiles={handleFiles} />
+      <BubbleTipTapToolbar editor={editor} />
       <div className="rounded border border-zinc-600 bg-zinc-800 focus-within:ring-1 focus-within:ring-zinc-500">
         <EditorContent editor={editor} />
+        <FileToolbar onFiles={handleFiles} />
       </div>
     </div>
   )
 }
 
-function Toolbar({
-  editor,
-  onFiles,
-}: {
-  editor: Editor
-  onFiles: (files: File[]) => void
-}) {
+// ─── File upload toolbar (always visible in edit mode) ────────────────────────
+
+function FileToolbar({ onFiles }: { onFiles: (files: File[]) => void }) {
   const imageInputRef = useRef<HTMLInputElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const btn = (active: boolean) =>
-    cn(
-      'p-1 rounded transition-colors',
-      active
-        ? 'bg-zinc-600 text-white'
-        : 'text-zinc-400 hover:text-white hover:bg-zinc-700'
-    )
-
-  function pick(ref: React.RefObject<HTMLInputElement | null>) {
-    return (e: React.MouseEvent) => {
-      e.preventDefault()
-      ref.current?.click()
-    }
-  }
+  const btnCls = 'p-1 rounded text-zinc-500 hover:text-zinc-300 hover:bg-zinc-700 transition-colors'
 
   return (
-    <div className="absolute top-full mt-1 left-0 z-30 flex items-center gap-0.5 rounded-md border border-zinc-700 bg-zinc-900 px-1 py-0.5 shadow-lg">
-      <button
-        type="button"
-        onMouseDown={(e) => {
-          e.preventDefault()
-          editor.chain().focus().toggleBold().run()
-        }}
-        className={btn(editor.isActive('bold'))}
-        title="Bold"
-      >
-        <Bold className="w-3.5 h-3.5" />
-      </button>
-      <button
-        type="button"
-        onMouseDown={(e) => {
-          e.preventDefault()
-          editor.chain().focus().toggleItalic().run()
-        }}
-        className={btn(editor.isActive('italic'))}
-        title="Italic"
-      >
-        <Italic className="w-3.5 h-3.5" />
-      </button>
-      <button
-        type="button"
-        onMouseDown={(e) => {
-          e.preventDefault()
-          editor.chain().focus().toggleUnderline().run()
-        }}
-        className={btn(editor.isActive('underline'))}
-        title="Underline"
-      >
-        <UnderlineIcon className="w-3.5 h-3.5" />
-      </button>
-      <button
-        type="button"
-        onMouseDown={(e) => {
-          e.preventDefault()
-          editor.chain().focus().toggleBulletList().run()
-        }}
-        className={btn(editor.isActive('bulletList'))}
-        title="Bullet list"
-      >
-        <List className="w-3.5 h-3.5" />
-      </button>
-      <button
-        type="button"
-        onMouseDown={(e) => {
-          e.preventDefault()
-          editor.chain().focus().toggleHighlight().run()
-        }}
-        className={btn(editor.isActive('highlight'))}
-        title="Highlight"
-      >
-        <Highlighter className="w-3.5 h-3.5" />
-      </button>
-
-      <span className="w-px h-4 bg-zinc-700 mx-0.5" />
-
-      {TEXT_COLORS.map((c) => (
-        <button
-          key={c.label}
-          type="button"
-          onMouseDown={(e) => {
-            e.preventDefault()
-            if (c.value === null) editor.chain().focus().unsetColor().run()
-            else editor.chain().focus().setColor(c.value).run()
-          }}
-          title={c.label}
-          className="w-4 h-4 rounded-full border border-zinc-600 hover:scale-110 transition-transform"
-          style={{
-            backgroundColor: c.value ?? 'transparent',
-            backgroundImage:
-              c.value === null
-                ? 'linear-gradient(45deg, transparent 45%, #ef4444 45%, #ef4444 55%, transparent 55%)'
-                : undefined,
-          }}
-        />
-      ))}
-
-      <span className="w-px h-4 bg-zinc-700 mx-0.5" />
-
-      {/* Image upload */}
+    <div className="flex items-center gap-0.5 px-1 py-0.5 border-t border-zinc-700">
       <button
         type="button"
         data-testid="cell-image-btn"
-        onMouseDown={pick(imageInputRef)}
-        className={btn(false)}
+        onMouseDown={(e) => { e.preventDefault(); imageInputRef.current?.click() }}
+        className={btnCls}
         title="Insert image"
       >
         <ImageIcon className="w-3.5 h-3.5" />
@@ -489,13 +385,11 @@ function Toolbar({
           e.target.value = ''
         }}
       />
-
-      {/* File attachment */}
       <button
         type="button"
         data-testid="cell-file-btn"
-        onMouseDown={pick(fileInputRef)}
-        className={btn(false)}
+        onMouseDown={(e) => { e.preventDefault(); fileInputRef.current?.click() }}
+        className={btnCls}
         title="Attach file (PDF, DOCX, CSV, video, audio)"
       >
         <Paperclip className="w-3.5 h-3.5" />
@@ -511,6 +405,311 @@ function Toolbar({
           e.target.value = ''
         }}
       />
+    </div>
+  )
+}
+
+// ─── Bubble toolbar (appears above text selection) ────────────────────────────
+
+type OpenMenu = 'heading' | 'list' | 'textColor' | 'highlight' | null
+
+function BubbleTipTapToolbar({ editor }: { editor: Editor }) {
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
+  const [openMenu, setOpenMenu] = useState<OpenMenu>(null)
+
+  useEffect(() => {
+    function onSelectionUpdate() {
+      const { from, to } = editor.state.selection
+      if (from === to) {
+        setPos(null)
+        setOpenMenu(null)
+        return
+      }
+      // Prefer native selection rect (accurate for multi-line); fall back to
+      // ProseMirror coordsAtPos when getBoundingClientRect returns zeros (headless).
+      const sel = window.getSelection()
+      if (sel && sel.rangeCount > 0) {
+        const rect = sel.getRangeAt(0).getBoundingClientRect()
+        if (rect.width > 0 || rect.height > 0) {
+          setPos({ x: rect.left + rect.width / 2, y: rect.top })
+          return
+        }
+      }
+      try {
+        const s = editor.view.coordsAtPos(from)
+        const e = editor.view.coordsAtPos(to)
+        setPos({ x: (s.left + e.right) / 2, y: Math.min(s.top, e.top) })
+      } catch {
+        setPos(null)
+      }
+    }
+
+    function onBlur() {
+      setPos(null)
+      setOpenMenu(null)
+    }
+
+    editor.on('selectionUpdate', onSelectionUpdate)
+    editor.on('blur', onBlur)
+    return () => {
+      editor.off('selectionUpdate', onSelectionUpdate)
+      editor.off('blur', onBlur)
+    }
+  }, [editor])
+
+  if (!pos || typeof document === 'undefined') return null
+
+  const tbBtn = (active: boolean) =>
+    cn(
+      'flex items-center gap-0.5 px-1.5 py-1 rounded text-xs transition-colors',
+      active
+        ? 'bg-zinc-600 text-white'
+        : 'text-zinc-300 hover:text-white hover:bg-zinc-700'
+    )
+
+  const activeTextColor = editor.getAttributes('textStyle').color as string | undefined
+  const activeHighlight = editor.getAttributes('highlight').color as string | undefined
+
+  return createPortal(
+    <div
+      data-bubble-toolbar
+      style={{
+        position: 'fixed',
+        left: pos.x,
+        top: pos.y,
+        transform: 'translate(-50%, calc(-100% - 6px))',
+        zIndex: 60,
+      }}
+      className="flex items-center gap-0.5 rounded-md border border-zinc-700 bg-zinc-900 px-1 py-0.5 shadow-xl"
+    >
+      {/* H — heading / paragraph dropdown */}
+      <div className="relative">
+        <button
+          type="button"
+          className={tbBtn(editor.isActive('heading'))}
+          title="Text style"
+          onMouseDown={(e) => {
+            e.preventDefault()
+            setOpenMenu(openMenu === 'heading' ? null : 'heading')
+          }}
+        >
+          <span className="font-bold">H</span>
+          <ChevronDown className="w-2.5 h-2.5" />
+        </button>
+        {openMenu === 'heading' && (
+          <div className="absolute top-full mt-1 left-0 z-10 bg-zinc-900 border border-zinc-700 rounded shadow-lg min-w-[130px]">
+            {([
+              { label: 'Paragraph', active: !editor.isActive('heading'), cmd: () => editor.chain().focus().setParagraph().run() },
+              { label: 'Heading 1', active: editor.isActive('heading', { level: 1 }), cmd: () => editor.chain().focus().toggleHeading({ level: 1 }).run() },
+              { label: 'Heading 2', active: editor.isActive('heading', { level: 2 }), cmd: () => editor.chain().focus().toggleHeading({ level: 2 }).run() },
+              { label: 'Heading 3', active: editor.isActive('heading', { level: 3 }), cmd: () => editor.chain().focus().toggleHeading({ level: 3 }).run() },
+            ] as const).map(({ label, active, cmd }) => (
+              <button
+                key={label}
+                type="button"
+                className={cn(
+                  'w-full text-left px-3 py-1.5 text-xs hover:bg-zinc-800 text-zinc-200',
+                  active && 'bg-zinc-700'
+                )}
+                onMouseDown={(e) => {
+                  e.preventDefault()
+                  cmd()
+                  setOpenMenu(null)
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <span className="w-px h-4 bg-zinc-700 mx-0.5" />
+
+      {/* B */}
+      <button
+        type="button"
+        className={tbBtn(editor.isActive('bold'))}
+        title="Bold"
+        onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().toggleBold().run() }}
+      >
+        <Bold className="w-3.5 h-3.5" />
+      </button>
+
+      {/* I */}
+      <button
+        type="button"
+        className={tbBtn(editor.isActive('italic'))}
+        title="Italic"
+        onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().toggleItalic().run() }}
+      >
+        <Italic className="w-3.5 h-3.5" />
+      </button>
+
+      <span className="w-px h-4 bg-zinc-700 mx-0.5" />
+
+      {/* List dropdown */}
+      <div className="relative">
+        <button
+          type="button"
+          className={tbBtn(editor.isActive('bulletList') || editor.isActive('orderedList'))}
+          title="List"
+          onMouseDown={(e) => {
+            e.preventDefault()
+            setOpenMenu(openMenu === 'list' ? null : 'list')
+          }}
+        >
+          <List className="w-3.5 h-3.5" />
+          <ChevronDown className="w-2.5 h-2.5" />
+        </button>
+        {openMenu === 'list' && (
+          <div className="absolute top-full mt-1 left-0 z-10 bg-zinc-900 border border-zinc-700 rounded shadow-lg min-w-[140px]">
+            <button
+              type="button"
+              className={cn(
+                'w-full text-left px-3 py-1.5 text-xs hover:bg-zinc-800 text-zinc-200 flex items-center gap-2',
+                editor.isActive('bulletList') && 'bg-zinc-700'
+              )}
+              onMouseDown={(e) => {
+                e.preventDefault()
+                editor.chain().focus().toggleBulletList().run()
+                setOpenMenu(null)
+              }}
+            >
+              <List className="w-3 h-3" /> Bullet list
+            </button>
+            <button
+              type="button"
+              className={cn(
+                'w-full text-left px-3 py-1.5 text-xs hover:bg-zinc-800 text-zinc-200 flex items-center gap-2',
+                editor.isActive('orderedList') && 'bg-zinc-700'
+              )}
+              onMouseDown={(e) => {
+                e.preventDefault()
+                editor.chain().focus().toggleOrderedList().run()
+                setOpenMenu(null)
+              }}
+            >
+              <ListOrdered className="w-3 h-3" /> Numbered list
+            </button>
+          </div>
+        )}
+      </div>
+
+      <span className="w-px h-4 bg-zinc-700 mx-0.5" />
+
+      {/* A — text color */}
+      <div className="relative">
+        <button
+          type="button"
+          className={tbBtn(!!activeTextColor)}
+          title="Text color"
+          onMouseDown={(e) => {
+            e.preventDefault()
+            setOpenMenu(openMenu === 'textColor' ? null : 'textColor')
+          }}
+        >
+          <span
+            className="text-xs font-bold"
+            style={{
+              borderBottom: `2px solid ${activeTextColor ?? '#9ca3af'}`,
+              lineHeight: 1,
+            }}
+          >
+            A
+          </span>
+          <ChevronDown className="w-2.5 h-2.5" />
+        </button>
+        {openMenu === 'textColor' && (
+          <SwatchPicker
+            onSelect={(color) => {
+              if (color === null) editor.chain().focus().unsetColor().run()
+              else editor.chain().focus().setColor(color).run()
+              setOpenMenu(null)
+            }}
+          />
+        )}
+      </div>
+
+      {/* Highlight color */}
+      <div className="relative">
+        <button
+          type="button"
+          className={tbBtn(!!activeHighlight)}
+          title="Highlight color"
+          onMouseDown={(e) => {
+            e.preventDefault()
+            setOpenMenu(openMenu === 'highlight' ? null : 'highlight')
+          }}
+        >
+          <span
+            className="w-3.5 h-3.5 rounded-sm border border-zinc-500 block"
+            style={{ backgroundColor: activeHighlight ?? 'transparent' }}
+          />
+          <ChevronDown className="w-2.5 h-2.5" />
+        </button>
+        {openMenu === 'highlight' && (
+          <SwatchPicker
+            onSelect={(color) => {
+              if (color === null) editor.chain().focus().unsetHighlight().run()
+              else editor.chain().focus().setHighlight({ color }).run()
+              setOpenMenu(null)
+            }}
+          />
+        )}
+      </div>
+
+      <span className="w-px h-4 bg-zinc-700 mx-0.5" />
+
+      {/* Clear formatting */}
+      <button
+        type="button"
+        className={tbBtn(false)}
+        title="Clear formatting"
+        onMouseDown={(e) => {
+          e.preventDefault()
+          editor.chain().focus().clearNodes().unsetAllMarks().run()
+        }}
+      >
+        <RemoveFormatting className="w-3.5 h-3.5" />
+      </button>
+    </div>,
+    document.body
+  )
+}
+
+// ─── Color swatch picker ──────────────────────────────────────────────────────
+
+function SwatchPicker({ onSelect }: { onSelect: (color: string | null) => void }) {
+  return (
+    <div
+      data-bubble-toolbar
+      className="absolute top-full mt-1 left-0 z-20 bg-zinc-900 border border-zinc-700 rounded-md shadow-xl p-2"
+    >
+      {/* None — diagonal line through white box */}
+      <button
+        type="button"
+        className="w-5 h-5 rounded border-2 border-zinc-300 mb-1.5 hover:scale-110 transition-transform"
+        style={{
+          backgroundImage:
+            'linear-gradient(45deg, transparent 45%, #ef4444 45%, #ef4444 55%, transparent 55%)',
+        }}
+        onMouseDown={(e) => { e.preventDefault(); onSelect(null) }}
+        title="Remove color"
+      />
+      {/* 6 × 4 grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1.25rem)', gap: '2px' }}>
+        {SWATCH_COLORS.map((color) => (
+          <button
+            key={color}
+            type="button"
+            className="w-5 h-5 rounded hover:scale-110 transition-transform border border-zinc-700"
+            style={{ backgroundColor: color }}
+            onMouseDown={(e) => { e.preventDefault(); onSelect(color) }}
+            title={color}
+          />
+        ))}
+      </div>
     </div>
   )
 }

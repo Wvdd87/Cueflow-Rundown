@@ -4,6 +4,7 @@ import { RundownCard } from '@/components/dashboard/RundownCard'
 import { TemplateCard } from '@/components/dashboard/TemplateCard'
 import { CreateEventDialog } from '@/components/dashboard/CreateEventDialog'
 import { CreateRundownDialog } from '@/components/dashboard/CreateRundownDialog'
+import { UserMenu } from '@/components/dashboard/UserMenu'
 import { Layers } from 'lucide-react'
 import type { Event, Rundown } from '@/lib/supabase/types'
 
@@ -15,11 +16,11 @@ export default async function DashboardPage() {
 
   const { data: profileData } = await supabase
     .from('profiles')
-    .select('team_id')
+    .select('team_id, full_name')
     .eq('id', user.id)
     .single()
 
-  const profile = profileData as { team_id: string | null } | null
+  const profile = profileData as { team_id: string | null; full_name: string | null } | null
   const teamId = profile?.team_id
 
   if (!teamId) {
@@ -73,6 +74,7 @@ export default async function DashboardPage() {
         <div className="flex items-center gap-2">
           <CreateEventDialog />
           <CreateRundownDialog events={allEvents} templates={templates} />
+          <UserMenu email={user.email ?? ''} fullName={profile?.full_name ?? null} />
         </div>
       </div>
 
@@ -107,7 +109,7 @@ export default async function DashboardPage() {
               </div>
               <div className="space-y-1.5">
                 {standaloneRundowns.map((rundown) => (
-                  <RundownCard key={rundown.id} rundown={rundown} />
+                  <RundownCard key={rundown.id} rundown={rundown} allEvents={allEvents} />
                 ))}
               </div>
             </section>

@@ -2,28 +2,38 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { FileText, MoreHorizontal, Pencil, Copy, Trash2, Check, X } from 'lucide-react'
-import { renameRundown, deleteRundown, duplicateRundown } from '@/app/actions/rundowns'
+import { FileText, MoreHorizontal, Pencil, Copy, Trash2, Check, X, FolderInput } from 'lucide-react'
+import { renameRundown, deleteRundown, duplicateRundown, moveRundown } from '@/app/actions/rundowns'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { StatusBadge } from '@/components/StatusBadge'
 import { toast } from 'sonner'
-import type { Rundown } from '@/lib/supabase/types'
+import type { Event, Rundown } from '@/lib/supabase/types'
 
 interface RundownCardProps {
   rundown: Rundown
+  allEvents?: Event[]
 }
 
-export function RundownCard({ rundown }: RundownCardProps) {
+export function RundownCard({ rundown, allEvents = [] }: RundownCardProps) {
   const [renaming, setRenaming] = useState(false)
   const [name, setName] = useState(rundown.name)
   const [saving, setSaving] = useState(false)
+
+  async function handleMove(eventId: string | null) {
+    const result = await moveRundown(rundown.id, eventId)
+    if (result.error) toast.error(result.error)
+    else toast.success(eventId ? 'Moved to event' : 'Removed from event')
+  }
 
   async function saveRename() {
     if (!name.trim() || name === rundown.name) {
@@ -120,6 +130,40 @@ export function RundownCard({ rundown }: RundownCardProps) {
           >
             <Copy className="w-3.5 h-3.5" /> Duplicate
           </DropdownMenuItem>
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger className="gap-2 focus:bg-zinc-800 focus:text-white cursor-pointer text-sm px-1.5 py-1">
+              <FolderInput className="w-3.5 h-3.5 shrink-0" /> Move to event
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="bg-zinc-900 border-zinc-700 text-zinc-200 min-w-[160px]">
+              {rundown.event_id && (
+                <>
+                  <DropdownMenuItem
+                    onClick={() => handleMove(null)}
+                    className="gap-2 focus:bg-zinc-800 focus:text-white cursor-pointer text-xs text-zinc-400"
+                  >
+                    Remove from event
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator className="bg-zinc-800" />
+                </>
+              )}
+              {allEvents.length === 0 ? (
+                <DropdownMenuItem disabled className="text-xs text-zinc-500 cursor-default">
+                  No events yet
+                </DropdownMenuItem>
+              ) : (
+                allEvents.map((ev) => (
+                  <DropdownMenuItem
+                    key={ev.id}
+                    onClick={() => handleMove(ev.id)}
+                    disabled={ev.id === rundown.event_id}
+                    className="gap-2 focus:bg-zinc-800 focus:text-white cursor-pointer text-xs"
+                  >
+                    {ev.name}
+                  </DropdownMenuItem>
+                ))
+              )}
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
           <DropdownMenuSeparator className="bg-zinc-800" />
           <DropdownMenuItem
             data-testid="rundown-delete"

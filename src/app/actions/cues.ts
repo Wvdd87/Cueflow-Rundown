@@ -38,6 +38,53 @@ export async function addCue(rundownId: string, afterPosition: number) {
   return { cue: data as Cue }
 }
 
+export async function addHeading(rundownId: string, afterPosition: number) {
+  const { supabase } = await getRundownAccess(rundownId)
+
+  await supabase.rpc('shift_cue_positions' as never, {
+    p_rundown_id: rundownId,
+    p_after_position: afterPosition,
+  } as never)
+
+  const { data, error } = await supabase
+    .from('cues')
+    .insert({
+      rundown_id: rundownId,
+      position: afterPosition + 1,
+      cue_number: '',
+      cue_type: 'heading',
+      title: '',
+      duration_ms: 0,
+    } as never)
+    .select('*')
+    .single()
+
+  if (error) return { error: error.message }
+
+  revalidatePath(`/rundown/${rundownId}`)
+  return { cue: data as Cue }
+}
+
+export async function convertCueToHeading(id: string, rundownId: string) {
+  const { supabase } = await getRundownAccess(rundownId)
+
+  const { error } = await supabase
+    .from('cues')
+    .update({
+      cue_type: 'heading',
+      start_type: 'soft',
+      start_time_override: null,
+      duration_ms: 0,
+      group_id: null,
+    } as never)
+    .eq('id', id)
+
+  if (error) return { error: error.message }
+
+  revalidatePath(`/rundown/${rundownId}`)
+  return { success: true }
+}
+
 export async function updateCue(
   id: string,
   rundownId: string,
@@ -61,7 +108,21 @@ export async function deleteCue(id: string, rundownId: string) {
 
   const { error } = await supabase
     .from('cues')
-    .delete()
+    .update({ deleted_at: new Date().toISOString() } as never)
+    .eq('id', id)
+
+  if (error) return { error: error.message }
+
+  revalidatePath(`/rundown/${rundownId}`)
+  return { success: true }
+}
+
+export async function restoreCue(id: string, rundownId: string) {
+  const { supabase } = await getRundownAccess(rundownId)
+
+  const { error } = await supabase
+    .from('cues')
+    .update({ deleted_at: null } as never)
     .eq('id', id)
 
   if (error) return { error: error.message }
@@ -97,6 +158,7 @@ export async function getRundownCues(rundownId: string) {
     .from('cues')
     .select('*')
     .eq('rundown_id', rundownId)
+    .is('deleted_at', null)
     .order('position', { ascending: true })
   const cues = (cuesData ?? []) as Cue[]
   let cells: Cell[] = []
@@ -119,10 +181,30 @@ export async function getRundownCues(rundownId: string) {
 
 export async function deleteCues(rundownId: string, ids: string[]) {
   const { supabase } = await getRundownAccess(rundownId)
-  const { error } = await supabase.from('cues').delete().in('id', ids)
+  const { error } = await supabase
+    .from('cues')
+    .update({ deleted_at: new Date().toISOString() } as never)
+    .in('id', ids)
   if (error) return { error: error.message }
   revalidatePath(`/rundown/${rundownId}`)
   return { success: true }
+}
+
+export async function getTrashedCues(rundownId: string): Promise<Cue[]> {
+  const { supabase } = await getRundownAccess(rundownId)
+
+  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+  // Hard-purge anything older than 30 days
+  await supabase.from('cues').delete().eq('rundown_id', rundownId).lt('deleted_at', cutoff)
+
+  const { data } = await supabase
+    .from('cues')
+    .select('*')
+    .eq('rundown_id', rundownId)
+    .not('deleted_at', 'is', null)
+    .order('deleted_at', { ascending: false })
+
+  return (data ?? []) as Cue[]
 }
 
 export async function setCuesBackground(

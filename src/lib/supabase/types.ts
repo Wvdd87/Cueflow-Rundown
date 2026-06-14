@@ -101,6 +101,10 @@ export type Database = {
           deleted_at: string | null
           created_at: string
           updated_at: string
+          time_display: 'auto' | '24h' | '12h' | '12h_no_ampm'
+          cue_number_prefix: string
+          cue_number_start: number
+          cue_number_digits: number
         }
         Insert: {
           id?: string
@@ -115,6 +119,10 @@ export type Database = {
           deleted_at?: string | null
           created_at?: string
           updated_at?: string
+          time_display?: 'auto' | '24h' | '12h' | '12h_no_ampm'
+          cue_number_prefix?: string
+          cue_number_start?: number
+          cue_number_digits?: number
         }
         Update: {
           id?: string
@@ -126,6 +134,10 @@ export type Database = {
           is_template?: boolean
           deleted_at?: string | null
           updated_at?: string
+          time_display?: 'auto' | '24h' | '12h' | '12h_no_ampm'
+          cue_number_prefix?: string
+          cue_number_start?: number
+          cue_number_digits?: number
         }
       }
       columns: {
@@ -139,6 +151,7 @@ export type Database = {
           options: string[] | null
           option_colors: Record<string, string> | null
           created_at: string
+          deleted_at: string | null
         }
         Insert: {
           id?: string
@@ -150,6 +163,7 @@ export type Database = {
           options?: string[] | null
           option_colors?: Record<string, string> | null
           created_at?: string
+          deleted_at?: string | null
         }
         Update: {
           name?: string
@@ -158,6 +172,7 @@ export type Database = {
           width?: number
           options?: string[] | null
           option_colors?: Record<string, string> | null
+          deleted_at?: string | null
         }
       }
       cues: {
@@ -178,6 +193,7 @@ export type Database = {
           locked: boolean
           created_at: string
           updated_at: string
+          deleted_at: string | null
         }
         Insert: {
           id?: string
@@ -196,6 +212,7 @@ export type Database = {
           locked?: boolean
           created_at?: string
           updated_at?: string
+          deleted_at?: string | null
         }
         Update: {
           position?: number
@@ -211,6 +228,7 @@ export type Database = {
           background_color?: string | null
           locked?: boolean
           updated_at?: string
+          deleted_at?: string | null
         }
       }
       cells: {
