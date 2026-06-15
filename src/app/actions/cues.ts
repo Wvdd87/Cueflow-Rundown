@@ -65,6 +65,17 @@ export async function addHeading(rundownId: string, afterPosition: number) {
   return { cue: data as Cue }
 }
 
+export async function convertHeadingToCue(id: string, rundownId: string) {
+  const { supabase } = await getRundownAccess(rundownId)
+  const { error } = await supabase
+    .from('cues')
+    .update({ cue_type: 'cue' } as never)
+    .eq('id', id)
+  if (error) return { error: error.message }
+  revalidatePath(`/rundown/${rundownId}`)
+  return { success: true }
+}
+
 export async function convertCueToHeading(id: string, rundownId: string) {
   const { supabase } = await getRundownAccess(rundownId)
 

@@ -9,6 +9,7 @@ import {
   ChevronRight,
   Ungroup,
   Trash2,
+  AlignLeft,
 } from 'lucide-react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -44,6 +45,7 @@ interface GroupHeaderRowProps {
   onUpdate: (id: string, updates: Partial<Cue>) => void
   onUngroup: (id: string) => void
   onDelete: (id: string) => void
+  onConvertToCue?: (id: string) => void
 }
 
 export function GroupHeaderRow({
@@ -58,6 +60,7 @@ export function GroupHeaderRow({
   onUpdate,
   onUngroup,
   onDelete,
+  onConvertToCue,
 }: GroupHeaderRowProps) {
   const [editing, setEditing] = useState(false)
   const [title, setTitle] = useState(heading.title || 'New group')
@@ -83,7 +86,7 @@ export function GroupHeaderRow({
   }
 
   return (
-    <div ref={setNodeRef} style={style} className="flex items-stretch min-h-[44px]">
+    <div ref={setNodeRef} style={style} className="flex items-stretch min-h-[44px]" data-cue-id={heading.id}>
       {/* Column 1: drag / settings / select */}
       <div className="w-10 shrink-0 relative flex items-center justify-center group/col1">
         <button
@@ -106,19 +109,29 @@ export function GroupHeaderRow({
           >
             <Settings className="w-3.5 h-3.5" />
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="bg-zinc-900 border-zinc-700 text-zinc-200 w-40">
-            <DropdownMenuItem
-              onClick={() => onUngroup(heading.id)}
-              className="gap-2 text-xs focus:bg-zinc-800 cursor-pointer"
-            >
-              <Ungroup className="w-3.5 h-3.5" /> Ungroup
-            </DropdownMenuItem>
+          <DropdownMenuContent align="start" className="bg-zinc-900 border-zinc-700 text-zinc-200 w-44">
+            {aggregate.count > 0 && (
+              <DropdownMenuItem
+                onClick={() => onUngroup(heading.id)}
+                className="gap-2 text-xs focus:bg-zinc-800 cursor-pointer"
+              >
+                <Ungroup className="w-3.5 h-3.5" /> Ungroup
+              </DropdownMenuItem>
+            )}
+            {aggregate.count === 0 && onConvertToCue && (
+              <DropdownMenuItem
+                onClick={() => onConvertToCue(heading.id)}
+                className="gap-2 text-xs focus:bg-zinc-800 cursor-pointer"
+              >
+                <AlignLeft className="w-3.5 h-3.5" /> Convert to cue
+              </DropdownMenuItem>
+            )}
             <DropdownMenuSeparator className="bg-zinc-800" />
             <DropdownMenuItem
               onClick={() => onDelete(heading.id)}
               className="gap-2 text-xs text-red-400 focus:bg-zinc-800 focus:text-red-400 cursor-pointer"
             >
-              <Trash2 className="w-3.5 h-3.5" /> Delete group
+              <Trash2 className="w-3.5 h-3.5" /> Delete
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

@@ -22,15 +22,19 @@ import {
   addCue,
   addHeading,
   convertCueToHeading,
+  convertHeadingToCue,
   updateCue,
   reorderCues,
+  deleteCue,
   deleteCues,
+  restoreCue,
   setCuesBackground,
   duplicateCues,
   groupCues,
   ungroupCues,
   getRundownCues,
 } from '@/app/actions/cues'
+import { useUndoHistory } from './useUndoHistory'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -44,7 +48,10 @@ import { GroupHeaderRow } from './GroupHeaderRow'
 import { BatchToolbar } from './BatchToolbar'
 import { TransportBar } from './TransportBar'
 import { RundownSettingsDialog } from './RundownSettingsDialog'
+import { MentionsVariablesDialog } from './MentionsVariablesDialog'
 import { RundownTrashDialog } from './RundownTrashDialog'
+import { RundownSearch } from './RundownSearch'
+import type { SearchCue } from './RundownSearch'
 import { RundownDataProvider } from './RundownDataContext'
 import type { RundownSettings } from './RundownDataContext'
 import { buildCueLayout, formatCueNumber } from './cueTree'
@@ -128,7 +135,9 @@ export function RundownEditor({
   }, [])
 
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [settingsTab, setSettingsTab] = useState<'mentions' | 'variables' | 'display' | 'numbering'>('mentions')
+  const [settingsTab, setSettingsTab] = useState<'display' | 'numbering'>('display')
+  const [mentionsOpen, setMentionsOpen] = useState(false)
+  const [mentionsTab, setMentionsTab] = useState<'mentions' | 'variables'>('mentions')
   const [trashOpen, setTrashOpen] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [hiddenCols, setHiddenCols] = useState<Set<string>>(() =>
@@ -146,6 +155,35 @@ export function RundownEditor({
     return isNaN(n) ? 240 : n
   })
   const lastSelectedRef = useRef<string | null>(null)
+  const cuesRef = useRef(cues)
+  cuesRef.current = cues
+
+  const history = useUndoHistory()
+
+  // Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z keyboard shortcuts
+  useEffect(() => {
+    async function onKey(e: KeyboardEvent) {
+      const tag = (e.target as HTMLElement)?.tagName
+      // Don't intercept while typing in inputs, textareas, or contenteditable
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement)?.isContentEditable) return
+      if (!e.ctrlKey && !e.metaKey) return
+      if (e.key === 'z' && !e.shiftKey) {
+        e.preventDefault()
+        const label = await history.undo()
+        if (label) toast.success(`Undo: ${label}`)
+      } else if (e.key === 'z' && e.shiftKey) {
+        e.preventDefault()
+        const label = await history.redo()
+        if (label) toast.success(`Redo: ${label}`)
+      } else if (e.key === 'y') {
+        e.preventDefault()
+        const label = await history.redo()
+        if (label) toast.success(`Redo: ${label}`)
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [history])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -182,6 +220,16 @@ export function RundownEditor({
     })
   }, [])
   const unhideAllColumns = useCallback(() => setHiddenCols(new Set()), [])
+
+  const handleSearchSelect = useCallback((id: string) => {
+    const el = document.querySelector(`[data-cue-id="${id}"]`)
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      el.classList.add('ring-2', 'ring-white', 'ring-inset')
+      setTimeout(() => el.classList.remove('ring-2', 'ring-white', 'ring-inset'), 1500)
+    }
+  }, [])
+
   const toggleCollapse = useCallback((id: string) => {
     setCollapsedGroups((prev) => {
       const next = new Set(prev)
@@ -197,6 +245,21 @@ export function RundownEditor({
 
   // --- Layout + timing ---
   const layout = useMemo(() => buildCueLayout(cues), [cues])
+
+  const searchCues = useMemo<SearchCue[]>(() =>
+    layout.docOrder.map((c) => ({
+      id: c.id,
+      displayNumber: formatCueNumber(
+        layout.numberOf[c.id] ?? '',
+        rundownSettings.cue_number_prefix,
+        rundownSettings.cue_number_start,
+        rundownSettings.cue_number_digits
+      ),
+      title: c.title ?? '',
+      cue_type: c.cue_type as 'cue' | 'heading',
+    }))
+  , [layout, rundownSettings])
+
   const timedCues = useMemo(() => calculateTimings(layout.docOrder), [layout])
   const timedMap = useMemo(
     () => Object.fromEntries(timedCues.map((t) => [t.id, t])) as Record<string, CueTimingOutput>,
@@ -320,7 +383,19 @@ export function RundownEditor({
       toast.error(result.error)
       setCues((prev) => prev.filter((c) => c.id !== optimisticCue.id))
     } else if (result.cue) {
-      setCues((prev) => prev.map((c) => (c.id === optimisticCue.id ? result.cue! : c)))
+      const realCue = result.cue
+      setCues((prev) => prev.map((c) => (c.id === optimisticCue.id ? realCue : c)))
+      history.push({
+        label: 'Add cue',
+        undo: async () => {
+          setCues((prev) => prev.filter((c) => c.id !== realCue.id))
+          await deleteCue(realCue.id, rundown.id)
+        },
+        redo: async () => {
+          await restoreCue(realCue.id, rundown.id)
+          await refreshCues()
+        },
+      })
     }
   }
 
@@ -351,7 +426,19 @@ export function RundownEditor({
       toast.error(result.error)
       setCues((prev) => prev.filter((c) => c.id !== optimisticCue.id))
     } else if (result.cue) {
-      setCues((prev) => prev.map((c) => (c.id === optimisticCue.id ? result.cue! : c)))
+      const realCue = result.cue
+      setCues((prev) => prev.map((c) => (c.id === optimisticCue.id ? realCue : c)))
+      history.push({
+        label: 'Add heading',
+        undo: async () => {
+          setCues((prev) => prev.filter((c) => c.id !== realCue.id))
+          await deleteCue(realCue.id, rundown.id)
+        },
+        redo: async () => {
+          await restoreCue(realCue.id, rundown.id)
+          await refreshCues()
+        },
+      })
     }
   }
 
@@ -368,11 +455,52 @@ export function RundownEditor({
     })
   }, [rundown.id, refreshCues])
 
+  const handleConvertToCue = useCallback((id: string) => {
+    setCues((prev) =>
+      prev.map((c) => c.id === id ? { ...c, cue_type: 'cue' as const } : c)
+    )
+    convertHeadingToCue(id, rundown.id).then((r) => {
+      if (r.error) { toast.error(r.error); refreshCues() }
+    })
+  }, [rundown.id, refreshCues])
+
+  const handleAddCueAt = useCallback(async (id: string, direction: 'above' | 'below') => {
+    const target = cuesRef.current.find((c) => c.id === id)
+    if (!target) return
+    const afterPosition = direction === 'above' ? target.position - 1 : target.position
+    const r = await addCue(rundown.id, afterPosition)
+    if (r.error) { toast.error(r.error); return }
+    await refreshCues()
+  }, [rundown.id, refreshCues])
+
+  const handleDuplicateSingle = useCallback(async (id: string) => {
+    const r = await duplicateCues(rundown.id, [id])
+    if (r.error) { toast.error(r.error); return }
+    await refreshCues()
+  }, [rundown.id, refreshCues])
+
   // --- Single-cue handlers (passed to rows) ---
   const handleDeleteCue = useCallback((id: string) => {
+    const snap = cuesRef.current.find((c) => c.id === id)
     setCues((prev) => prev.filter((c) => c.id !== id))
     setSelectedIds((prev) => { const n = new Set(prev); n.delete(id); return n })
-  }, [])
+    deleteCue(id, rundown.id).then((r) => {
+      if (r.error) { toast.error(r.error); refreshCues() }
+    })
+    if (snap) {
+      history.push({
+        label: `Delete "${snap.title || 'Untitled cue'}"`,
+        undo: async () => {
+          await restoreCue(id, rundown.id)
+          await refreshCues()
+        },
+        redo: async () => {
+          setCues((prev) => prev.filter((c) => c.id !== id))
+          await deleteCue(id, rundown.id)
+        },
+      })
+    }
+  }, [rundown.id, refreshCues, history.push])
   const handleUpdateCue = useCallback((id: string, updates: Partial<Cue>) => {
     setCues((prev) => prev.map((c) => (c.id === id ? { ...c, ...updates } : c)))
   }, [])
@@ -393,8 +521,19 @@ export function RundownEditor({
     setCues((prev) => prev.filter((c) => !selectedIds.has(c.id)))
     setSelectedIds(new Set())
     const r = await deleteCues(rundown.id, ids)
-    if (r.error) { toast.error(r.error); refreshCues() }
-  }, [selectedIds, rundown.id, refreshCues])
+    if (r.error) { toast.error(r.error); refreshCues(); return }
+    history.push({
+      label: `Delete ${ids.length} cue${ids.length > 1 ? 's' : ''}`,
+      undo: async () => {
+        await Promise.all(ids.map((id) => restoreCue(id, rundown.id)))
+        await refreshCues()
+      },
+      redo: async () => {
+        setCues((prev) => prev.filter((c) => !ids.includes(c.id)))
+        await deleteCues(rundown.id, ids)
+      },
+    })
+  }, [selectedIds, rundown.id, refreshCues, history.push])
 
   const handleBatchBackground = useCallback(async (color: string | null) => {
     const ids = [...selectedIds]
@@ -493,11 +632,28 @@ export function RundownEditor({
         for (const chId of childrenByHeading.get(id) ?? []) fullOrder.push(chId)
       }
     }
+    // Capture old order before mutating
+    const oldFullOrder = cues
+      .slice()
+      .sort((a, b) => a.position - b.position)
+      .map((c) => c.id)
     const pm = new Map(fullOrder.map((id, i) => [id, i]))
-    const prev = cues
+    const snapshot = cues
     setCues((cs) => cs.map((c) => ({ ...c, position: pm.get(c.id) ?? c.position })))
     const r = await reorderCues(rundown.id, fullOrder)
-    if (r.error) { toast.error(r.error); setCues(prev) }
+    if (r.error) { toast.error(r.error); setCues(snapshot); return }
+    history.push({
+      label: 'Reorder cues',
+      undo: async () => {
+        const pm2 = new Map(oldFullOrder.map((id, i) => [id, i]))
+        setCues((cs) => cs.map((c) => ({ ...c, position: pm2.get(c.id) ?? c.position })))
+        await reorderCues(rundown.id, oldFullOrder)
+      },
+      redo: async () => {
+        setCues((cs) => cs.map((c) => ({ ...c, position: pm.get(c.id) ?? c.position })))
+        await reorderCues(rundown.id, fullOrder)
+      },
+    })
   }
 
   function groupAggregate(children: Cue[]) {
@@ -531,12 +687,16 @@ export function RundownEditor({
         onDelete={handleDeleteCue}
         onUpdate={handleUpdateCue}
         onConvertToHeading={handleConvertToHeading}
+        onAddAbove={(id) => handleAddCueAt(id, 'above')}
+        onAddBelow={(id) => handleAddCueAt(id, 'below')}
+        onDuplicate={handleDuplicateSingle}
         onCellChange={handleCellChange}
         live={live.isLive}
         isActive={cue.id === live.activeCueId}
         isNext={cue.id === live.nextCueId}
         liveRemainingMs={cue.id === live.activeCueId ? live.remainingMs : null}
         liveElapsedMs={cue.id === live.activeCueId ? live.elapsedMs : null}
+        liveGetElapsedMs={cue.id === live.activeCueId ? live.getElapsedMs : undefined}
         onJump={live.jumpTo}
         privateNote={privateNotes[cue.id] ?? ''}
         onPrivateNoteChange={handlePrivateNoteChange}
@@ -562,14 +722,32 @@ export function RundownEditor({
           onPlayClick={() => (live.isLive ? live.end() : live.start())}
           isLive={live.isLive}
           onOpenSettings={(tab) => {
-            setSettingsTab(tab ?? 'mentions')
+            setSettingsTab(tab ?? 'display')
             setSettingsOpen(true)
+          }}
+          onOpenMentions={(tab) => {
+            setMentionsTab(tab ?? 'mentions')
+            setMentionsOpen(true)
           }}
           onResetTiming={() => {
             live.end()
             toast.success('Rundown timing reset')
           }}
           onOpenTrash={() => setTrashOpen(true)}
+          searchCues={searchCues}
+          onSearchSelect={handleSearchSelect}
+          canUndo={history.canUndo}
+          canRedo={history.canRedo}
+          undoLabel={history.undoLabel}
+          redoLabel={history.redoLabel}
+          onUndo={async () => {
+            const label = await history.undo()
+            if (label) toast.success(`Undo: ${label}`)
+          }}
+          onRedo={async () => {
+            const label = await history.redo()
+            if (label) toast.success(`Redo: ${label}`)
+          }}
         />
 
         <div className="flex-1 overflow-hidden flex flex-col">
@@ -636,6 +814,7 @@ export function RundownEditor({
                           onUpdate={handleUpdateCue}
                           onUngroup={handleUngroupOne}
                           onDelete={handleDeleteGroup}
+                          onConvertToCue={handleConvertToCue}
                         />
                         {!collapsed &&
                           item.children.map((ch) => {
@@ -764,6 +943,12 @@ export function RundownEditor({
           open={settingsOpen}
           onOpenChange={setSettingsOpen}
           initialTab={settingsTab}
+        />
+
+        <MentionsVariablesDialog
+          open={mentionsOpen}
+          onOpenChange={setMentionsOpen}
+          initialTab={mentionsTab}
         />
 
         <RundownTrashDialog

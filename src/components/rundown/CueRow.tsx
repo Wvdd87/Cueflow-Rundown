@@ -12,10 +12,12 @@ import {
   Pin,
   ChevronDown,
   Heading as HeadingIcon,
+  Copy,
+  Plus,
 } from 'lucide-react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { updateCue, deleteCue } from '@/app/actions/cues'
+import { updateCue } from '@/app/actions/cues'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -53,12 +55,16 @@ interface CueRowProps {
   onDelete: (id: string) => void
   onUpdate: (id: string, updates: Partial<Cue>) => void
   onConvertToHeading: (id: string) => void
+  onAddAbove: (id: string) => void
+  onAddBelow: (id: string) => void
+  onDuplicate: (id: string) => void
   onCellChange: (cueId: string, columnId: string, content: string) => void
   live: boolean
   isActive: boolean
   isNext: boolean
   liveRemainingMs: number | null
   liveElapsedMs: number | null
+  liveGetElapsedMs?: () => number
   onJump: (cueId: string) => void
   privateNote: string
   onPrivateNoteChange: (cueId: string, content: string) => void
@@ -82,12 +88,16 @@ export function CueRow({
   onDelete,
   onUpdate,
   onConvertToHeading,
+  onAddAbove,
+  onAddBelow,
+  onDuplicate,
   onCellChange,
   live,
   isActive,
   isNext,
   liveRemainingMs,
   liveElapsedMs,
+  liveGetElapsedMs,
   onJump,
   privateNote,
   onPrivateNoteChange,
@@ -111,6 +121,25 @@ export function CueRow({
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: cue.id })
   const rowRef = useRef<HTMLDivElement>(null)
+  const progressBarRef = useRef<HTMLDivElement>(null)
+
+  // Drive the progress bar at 60 fps via rAF to avoid the 200 ms tick stutter
+  useEffect(() => {
+    if (!isActive || !liveGetElapsedMs || cue.duration_ms <= 0) return
+    let rafId: number
+    function frame() {
+      if (progressBarRef.current) {
+        const elapsed = liveGetElapsedMs!()
+        const pct = Math.min(100, (elapsed / cue.duration_ms) * 100)
+        progressBarRef.current.style.width = `${pct}%`
+        progressBarRef.current.style.backgroundColor =
+          elapsed > cue.duration_ms ? 'rgb(239 68 68)' : 'rgb(34 197 94)'
+      }
+      rafId = requestAnimationFrame(frame)
+    }
+    rafId = requestAnimationFrame(frame)
+    return () => cancelAnimationFrame(rafId)
+  }, [isActive, liveGetElapsedMs, cue.duration_ms])
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -166,11 +195,9 @@ export function CueRow({
     await updateCue(cue.id, rundownId, { subtitle: s || null })
   }
 
-  // --- Delete ---
-  async function handleDelete() {
+  // --- Delete (server call lives in RundownEditor.handleDeleteCue for undo support) ---
+  function handleDelete() {
     onDelete(cue.id)
-    const result = await deleteCue(cue.id, rundownId)
-    if (result.error) toast.error(result.error)
   }
 
   // --- Start type toggle ---
@@ -219,6 +246,7 @@ export function CueRow({
         rowRef.current = node
       }}
       style={style}
+      data-cue-id={cue.id}
     >
       {/* CURRENT / NEXT cue label (live mode) */}
       {live && (isActive || isNext) && (
@@ -330,6 +358,26 @@ export function CueRow({
                 </div>
               </div>
 
+              <DropdownMenuSeparator className="bg-zinc-800" />
+
+              <DropdownMenuItem
+                onClick={() => onDuplicate(cue.id)}
+                className="gap-2 text-xs focus:bg-zinc-800 cursor-pointer"
+              >
+                <Copy className="w-3.5 h-3.5" /> Duplicate
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => onAddAbove(cue.id)}
+                className="gap-2 text-xs focus:bg-zinc-800 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" /> Add cue above
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => onAddBelow(cue.id)}
+                className="gap-2 text-xs focus:bg-zinc-800 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" /> Add cue below
+              </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => onConvertToHeading(cue.id)}
                 data-testid="convert-to-heading-menu-item"
@@ -609,6 +657,17 @@ export function CueRow({
             )
           })
         })()}
+
+        {/* Live progress bar — rAF-driven for smooth animation */}
+        {isActive && cue.duration_ms > 0 && (
+          <div className="absolute bottom-0 left-0 right-0 h-[3px] bg-zinc-800/60 pointer-events-none">
+            <div
+              ref={progressBarRef}
+              className="h-full"
+              style={{ width: '0%' }}
+            />
+          </div>
+        )}
       </div>
     </div>
   )

@@ -19,6 +19,8 @@ import {
   Trash2,
   RotateCcw,
   LayoutTemplate,
+  Undo2,
+  Redo2,
 } from 'lucide-react'
 import {
   renameRundown,
@@ -26,6 +28,8 @@ import {
   saveAsTemplate,
 } from '@/app/actions/rundowns'
 import { ShareDialog } from './ShareDialog'
+import { RundownSearch } from './RundownSearch'
+import type { SearchCue } from './RundownSearch'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -49,9 +53,18 @@ interface RundownHeaderProps {
   columns: Column[]
   onPlayClick: () => void
   isLive: boolean
-  onOpenSettings: (tab?: 'mentions' | 'variables' | 'display' | 'numbering') => void
+  onOpenSettings: (tab?: 'display' | 'numbering') => void
+  onOpenMentions: (tab?: 'mentions' | 'variables') => void
   onResetTiming: () => void
   onOpenTrash: () => void
+  canUndo: boolean
+  canRedo: boolean
+  undoLabel?: string
+  redoLabel?: string
+  onUndo: () => void
+  onRedo: () => void
+  searchCues: SearchCue[]
+  onSearchSelect: (id: string) => void
 }
 
 export function RundownHeader({
@@ -60,8 +73,17 @@ export function RundownHeader({
   onPlayClick,
   isLive,
   onOpenSettings,
+  onOpenMentions,
   onResetTiming,
   onOpenTrash,
+  canUndo,
+  canRedo,
+  undoLabel,
+  redoLabel,
+  onUndo,
+  onRedo,
+  searchCues,
+  onSearchSelect,
 }: RundownHeaderProps) {
   const [name, setName] = useState(rundown.name)
   const [editing, setEditing] = useState(false)
@@ -183,7 +205,26 @@ export function RundownHeader({
         </div>
       )}
 
+      <RundownSearch cues={searchCues} onSelect={onSearchSelect} />
+
       <div className="flex items-center gap-2">
+        <button
+          onClick={onUndo}
+          disabled={!canUndo}
+          title={canUndo ? `Undo: ${undoLabel} (⌘Z)` : 'Nothing to undo'}
+          className="p-1.5 rounded text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+        >
+          <Undo2 className="w-4 h-4" />
+        </button>
+        <button
+          onClick={onRedo}
+          disabled={!canRedo}
+          title={canRedo ? `Redo: ${redoLabel} (⌘⇧Z)` : 'Nothing to redo'}
+          className="p-1.5 rounded text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+        >
+          <Redo2 className="w-4 h-4" />
+        </button>
+
         <Button
           size="sm"
           onClick={onPlayClick}
@@ -226,13 +267,13 @@ export function RundownHeader({
               <SettingsIcon className="w-4 h-4" /> Settings
             </DropdownMenuItem>
             <DropdownMenuItem
-              onClick={() => onOpenSettings('mentions')}
+              onClick={() => onOpenMentions('mentions')}
               className="gap-2 text-sm focus:bg-zinc-800 cursor-pointer"
             >
               <AtSign className="w-4 h-4" /> Mentions
             </DropdownMenuItem>
             <DropdownMenuItem
-              onClick={() => onOpenSettings('variables')}
+              onClick={() => onOpenMentions('variables')}
               className="gap-2 text-sm focus:bg-zinc-800 cursor-pointer"
             >
               <DollarSign className="w-4 h-4" /> Text Variables
@@ -281,12 +322,6 @@ export function RundownHeader({
 
             <DropdownMenuSeparator className="bg-zinc-800" />
 
-            <DropdownMenuItem
-              render={<Link href="/trash" />}
-              className="gap-2 text-sm focus:bg-zinc-800 cursor-pointer"
-            >
-              <Trash2 className="w-4 h-4" /> Trash
-            </DropdownMenuItem>
             <DropdownMenuItem
               onClick={onResetTiming}
               className="gap-2 text-sm focus:bg-zinc-800 cursor-pointer"

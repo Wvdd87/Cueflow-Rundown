@@ -39,6 +39,8 @@ export interface LiveShow {
   overUnderMs: number
   /** manual time added/removed from the active cue this run */
   nudgeMs: number
+  /** Real-time elapsed ms for the active cue — safe to call from rAF loops */
+  getElapsedMs: () => number
   start: () => void
   pause: () => void
   resume: () => void
@@ -263,6 +265,7 @@ export function useLiveShow(cues: LiveCue[]): LiveShow {
     isOvertime,
     overUnderMs,
     nudgeMs,
+    getElapsedMs: elapsedNow,
     start,
     pause,
     resume,
