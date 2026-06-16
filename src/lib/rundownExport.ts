@@ -5,7 +5,10 @@ import {
   formatDuration,
   type CueTimingOutput,
 } from '@/lib/timing'
-import type { Cue, Column, Cell } from '@/lib/supabase/types'
+import { cellToPlainText, stripHtml } from '@/lib/cellHtml'
+import type { Cue, Column, Cell, Variable } from '@/lib/supabase/types'
+
+export { stripHtml }
 
 export interface ExportRow {
   number: string
@@ -17,25 +20,13 @@ export interface ExportRow {
   cells: string[] // one plain-text value per column, in column order
 }
 
-/** Strip rich-text HTML down to readable plain text for exports. */
-export function stripHtml(html: string | null | undefined): string {
-  if (!html) return ''
-  return html
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
 function rowFor(
   cue: Cue,
   number: string,
   timedMap: Record<string, CueTimingOutput>,
   columns: Column[],
-  cellMap: Record<string, string>
+  cellMap: Record<string, string>,
+  varMap: Record<string, string>
 ): ExportRow {
   const t = timedMap[cue.id]
   return {
@@ -45,7 +36,9 @@ function rowFor(
     duration: formatDuration(cue.duration_ms),
     title: cue.title || '',
     subtitle: cue.subtitle || '',
-    cells: columns.map((col) => stripHtml(cellMap[`${cue.id}:${col.id}`])),
+    cells: columns.map((col) =>
+      cellToPlainText(cellMap[`${cue.id}:${col.id}`], varMap, col.col_type)
+    ),
   }
 }
 
@@ -53,10 +46,14 @@ function rowFor(
 export function buildExportRows(
   columns: Column[],
   cues: Cue[],
-  cells: Cell[]
+  cells: Cell[],
+  variables: Variable[] = []
 ): ExportRow[] {
   const cellMap: Record<string, string> = Object.fromEntries(
     cells.map((c) => [`${c.cue_id}:${c.column_id}`, c.content ?? ''])
+  )
+  const varMap: Record<string, string> = Object.fromEntries(
+    variables.map((v) => [v.key, v.value])
   )
   const layout = buildCueLayout(cues)
   const timed = calculateTimings(layout.docOrder)
@@ -81,10 +78,10 @@ export function buildExportRows(
         cells: columns.map(() => ''),
       })
       for (const ch of item.children) {
-        rows.push(rowFor(ch, layout.numberOf[ch.id] ?? '', timedMap, columns, cellMap))
+        rows.push(rowFor(ch, layout.numberOf[ch.id] ?? '', timedMap, columns, cellMap, varMap))
       }
     } else {
-      rows.push(rowFor(item.cue, item.number, timedMap, columns, cellMap))
+      rows.push(rowFor(item.cue, item.number, timedMap, columns, cellMap, varMap))
     }
   }
   return rows

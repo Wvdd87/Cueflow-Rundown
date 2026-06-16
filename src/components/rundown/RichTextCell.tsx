@@ -99,9 +99,9 @@ export function RichTextCell({
       <div
         data-testid="richtext-cell"
         onClick={() => setEditing(true)}
-        className="tiptap-cell w-full min-h-[28px] px-2 py-1 text-sm text-zinc-300 cursor-text hover:bg-zinc-800/50 rounded break-words"
+        className="tiptap-cell w-full min-h-[28px] px-2 py-1 text-sm text-[#c8c9d0] cursor-text hover:bg-[#1d1d24]/40 break-words"
       >
-        <span className="text-zinc-700 italic">—</span>
+        <span className="text-[#5a5c66] italic">—</span>
       </div>
     )
   }
@@ -181,7 +181,7 @@ function CellDisplay({
         onClick={onClick}
         onMouseOver={handleMouseOver}
         onMouseOut={handleMouseOut}
-        className="tiptap-cell w-full min-h-[28px] px-2 py-1 text-sm text-zinc-300 cursor-text hover:bg-zinc-800/50 rounded break-words"
+        className="tiptap-cell w-full min-h-[28px] px-2 py-1 text-sm text-[#c8c9d0] cursor-text hover:bg-[#1d1d24]/40 break-words"
         dangerouslySetInnerHTML={{ __html: resolvedHtml }}
       />
       {hover &&
@@ -290,7 +290,7 @@ function CellTipTap({
     editorProps: {
       attributes: {
         class:
-          'tiptap-cell prose-invert focus:outline-none min-h-[28px] px-2 py-1 text-sm text-white',
+          'tiptap-cell prose-invert focus:outline-none min-h-[28px] px-2 py-1 text-sm text-[#eef0f3]',
       },
       handleDrop(view, event, _slice, moved) {
         if (moved) return false
@@ -346,7 +346,7 @@ function CellTipTap({
       }}
     >
       <BubbleTipTapToolbar editor={editor} />
-      <div className="rounded border border-zinc-600 bg-zinc-800 focus-within:ring-1 focus-within:ring-zinc-500">
+      <div className="border border-[#f0a838] bg-[#0a0a0d]">
         <EditorContent editor={editor} />
         <FileToolbar onFiles={handleFiles} />
       </div>
@@ -360,10 +360,10 @@ function FileToolbar({ onFiles }: { onFiles: (files: File[]) => void }) {
   const imageInputRef = useRef<HTMLInputElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const btnCls = 'p-1 rounded text-zinc-500 hover:text-zinc-300 hover:bg-zinc-700 transition-colors'
+  const btnCls = 'p-1 text-[#7c7e8a] hover:text-[#c8c9d0] hover:bg-[#1d1d24] transition-colors'
 
   return (
-    <div className="flex items-center gap-0.5 px-1 py-0.5 border-t border-zinc-700">
+    <div className="flex items-center gap-0.5 px-1 py-0.5 border-t border-[#2e2e38]">
       <button
         type="button"
         data-testid="cell-image-btn"
@@ -413,7 +413,7 @@ function FileToolbar({ onFiles }: { onFiles: (files: File[]) => void }) {
 
 type OpenMenu = 'heading' | 'list' | 'textColor' | 'highlight' | null
 
-function BubbleTipTapToolbar({ editor }: { editor: Editor }) {
+export function BubbleTipTapToolbar({ editor }: { editor: Editor }) {
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
   const [openMenu, setOpenMenu] = useState<OpenMenu>(null)
 

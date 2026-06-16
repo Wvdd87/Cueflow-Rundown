@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { buildExportRows, rowsToCsv } from '@/lib/rundownExport'
-import type { Rundown, Column, Cue, Cell } from '@/lib/supabase/types'
+import type { Rundown, Column, Cue, Cell, Variable } from '@/lib/supabase/types'
 
 export const runtime = 'nodejs'
 
@@ -23,12 +23,14 @@ export async function GET(
   if (!rundownData) return new Response('Not found', { status: 404 })
   const rundown = rundownData as Rundown
 
-  const [{ data: cuesData }, { data: colsData }] = await Promise.all([
+  const [{ data: cuesData }, { data: colsData }, { data: varsData }] = await Promise.all([
     supabase.from('cues').select('*').eq('rundown_id', id).order('position'),
     supabase.from('columns').select('*').eq('rundown_id', id).order('position'),
+    supabase.from('variables').select('*').eq('rundown_id', id),
   ])
   const cues = (cuesData ?? []) as Cue[]
   const columns = (colsData ?? []) as Column[]
+  const variables = (varsData ?? []) as Variable[]
 
   let cells: Cell[] = []
   if (cues.length > 0) {
@@ -39,7 +41,7 @@ export async function GET(
     cells = (cellData ?? []) as Cell[]
   }
 
-  const rows = buildExportRows(columns, cues, cells)
+  const rows = buildExportRows(columns, cues, cells, variables)
   const csv = rowsToCsv(columns, rows)
   const filename = `${rundown.name.replace(/[^a-z0-9]+/gi, '-')}.csv`
 

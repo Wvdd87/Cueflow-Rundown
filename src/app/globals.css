@@ -245,13 +245,20 @@ select option {
   color: #60a5fa;
   text-decoration: underline;
 }
-/* TipTap placeholder for an empty editor */
+/* TipTap placeholder for an empty editor — single clipped line so it never
+   wraps and overlaps the file toolbar in a narrow cell. */
+.tiptap-cell p.is-editor-empty:first-child {
+  position: relative;
+}
 .tiptap-cell p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);
-  color: #52525b;
-  float: left;
-  height: 0;
+  color: #5a5c66;
+  position: absolute;
+  inset: 0 0 auto 0;
   pointer-events: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Inline images in cells */

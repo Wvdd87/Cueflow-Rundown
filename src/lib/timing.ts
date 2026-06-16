@@ -88,17 +88,22 @@ export function parseDurationInput(raw: string): number | null {
 export function calculateTimings(cues: CueTimingInput[]): CueTimingOutput[] {
   const result: CueTimingOutput[] = []
   let cursor = 0
+  // The first real cue is the show anchor — it has no predecessor to measure a
+  // gap against, so we suppress its gap (otherwise a hard first cue at e.g.
+  // 09:00 would report a bogus "+9:00:00 gap" relative to midnight).
+  let anchored = false
 
   for (const cue of cues) {
     if (cue.start_type === 'hard' && cue.start_time_override) {
       const hardMs = parseTimeToMs(cue.start_time_override)
-      const gap_ms = hardMs - cursor
+      const gap_ms = anchored ? hardMs - cursor : 0
       cursor = hardMs + cue.duration_ms
       result.push({ ...cue, calculated_start_ms: hardMs, gap_ms })
     } else {
       result.push({ ...cue, calculated_start_ms: cursor, gap_ms: 0 })
       cursor += cue.duration_ms
     }
+    if (cue.cue_type !== 'heading') anchored = true
   }
 
   return result

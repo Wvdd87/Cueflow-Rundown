@@ -8,8 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { FIELD, FIELD_LABEL, BTN_PRIMARY, TAB, TAB_ON, TAB_OFF } from './dialogStyles'
 import { useRundownData } from './RundownDataContext'
 import { updateRundownSettings } from '@/app/actions/rundowns'
 import { toast } from 'sonner'
@@ -98,23 +97,18 @@ export function RundownSettingsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-zinc-900 border-zinc-800 text-white sm:max-w-lg">
-        <DialogHeader>
+      <DialogContent className="bg-[#111116] border-[#2e2e38] text-white sm:max-w-lg p-0 gap-0 border-t-2 border-t-[#f0a838]">
+        <DialogHeader className="px-5 py-4 border-b border-[#1d1d24]">
           <DialogTitle>Rundown settings</DialogTitle>
         </DialogHeader>
 
-        <div className="flex gap-1 border-b border-zinc-800 -mx-1 px-1">
+        <div className="flex gap-1 px-5 border-b border-[#1d1d24]">
           {tabs.map((t) => (
             <button
               key={t.id}
               data-testid={`tab-${t.id}`}
               onClick={() => setTab(t.id)}
-              className={cn(
-                'flex items-center gap-1.5 px-3 py-2 text-sm border-b-2 -mb-px transition-colors whitespace-nowrap shrink-0',
-                tab === t.id
-                  ? 'border-white text-white'
-                  : 'border-transparent text-zinc-500 hover:text-zinc-300'
-              )}
+              className={cn(TAB, tab === t.id ? TAB_ON : TAB_OFF)}
             >
               {t.icon}
               {t.label}
@@ -123,8 +117,8 @@ export function RundownSettingsDialog({
         </div>
 
         {tab === 'display' && (
-          <div className="space-y-4 mt-1">
-            <p className="text-xs text-zinc-500">
+          <div className="space-y-4 p-5">
+            <p className="text-xs text-[#888b96]">
               Choose how start times are displayed in the rundown.
             </p>
 
@@ -132,7 +126,12 @@ export function RundownSettingsDialog({
               {TIME_OPTIONS.map((opt) => (
                 <label
                   key={opt.value}
-                  className="flex items-center gap-3 rounded-md bg-zinc-800/50 px-3 py-2.5 cursor-pointer hover:bg-zinc-800 transition-colors"
+                  className={cn(
+                    'flex items-center gap-3 border px-3 py-2.5 cursor-pointer transition-colors',
+                    timeDisplay === opt.value
+                      ? 'bg-[#16161c] border-[#f0a838]/60'
+                      : 'bg-[#16161c] border-[#2e2e38] hover:border-[#3a3a48]'
+                  )}
                 >
                   <input
                     type="radio"
@@ -140,83 +139,52 @@ export function RundownSettingsDialog({
                     value={opt.value}
                     checked={timeDisplay === opt.value}
                     onChange={() => setTimeDisplay(opt.value)}
-                    className="accent-white"
+                    className="accent-[#f0a838]"
                     data-testid={`time-display-${opt.value}`}
                   />
-                  <span className="flex-1 text-sm text-white">{opt.label}</span>
-                  <span className="text-xs font-mono text-zinc-400">{opt.example}</span>
+                  <span className="flex-1 text-sm text-[#eef0f3]">{opt.label}</span>
+                  <span className="text-xs font-mono text-[#9ba0ab]">{opt.example}</span>
                 </label>
               ))}
             </div>
 
-            <Button
-              data-testid="save-display-btn"
-              onClick={handleSaveDisplay}
-              disabled={savingDisplay}
-              className="bg-white text-zinc-900 hover:bg-zinc-100"
-            >
+            <button data-testid="save-display-btn" onClick={handleSaveDisplay} disabled={savingDisplay} className={BTN_PRIMARY}>
               {savingDisplay ? 'Saving…' : 'Save'}
-            </Button>
+            </button>
           </div>
         )}
 
         {tab === 'numbering' && (
-          <div className="space-y-4 mt-1">
-            <p className="text-xs text-zinc-500">
+          <div className="space-y-4 p-5">
+            <p className="text-xs text-[#888b96]">
               Customise how cue numbers appear in the rundown.
             </p>
 
             <div className="grid grid-cols-3 gap-3">
-              <div className="space-y-1">
-                <label className="text-xs text-zinc-400">Prefix</label>
-                <Input
-                  data-testid="cue-number-prefix"
-                  value={numPrefix}
-                  onChange={(e) => setNumPrefix(e.target.value)}
-                  placeholder="e.g. A-"
-                  className="bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-600"
-                />
+              <div>
+                <label className={FIELD_LABEL}>Prefix</label>
+                <input data-testid="cue-number-prefix" value={numPrefix} onChange={(e) => setNumPrefix(e.target.value)} placeholder="e.g. A-" className={FIELD} />
               </div>
-              <div className="space-y-1">
-                <label className="text-xs text-zinc-400">Start from</label>
-                <Input
-                  data-testid="cue-number-start"
-                  type="number"
-                  min={0}
-                  value={numStart}
-                  onChange={(e) => setNumStart(e.target.value)}
-                  className="bg-zinc-800 border-zinc-700 text-white"
-                />
+              <div>
+                <label className={FIELD_LABEL}>Start from</label>
+                <input data-testid="cue-number-start" type="number" min={0} value={numStart} onChange={(e) => setNumStart(e.target.value)} className={FIELD} />
               </div>
-              <div className="space-y-1">
-                <label className="text-xs text-zinc-400">Digits</label>
-                <Input
-                  data-testid="cue-number-digits"
-                  type="number"
-                  min={1}
-                  max={6}
-                  value={numDigits}
-                  onChange={(e) => setNumDigits(e.target.value)}
-                  className="bg-zinc-800 border-zinc-700 text-white"
-                />
+              <div>
+                <label className={FIELD_LABEL}>Digits</label>
+                <input data-testid="cue-number-digits" type="number" min={1} max={6} value={numDigits} onChange={(e) => setNumDigits(e.target.value)} className={FIELD} />
               </div>
             </div>
 
-            <div className="rounded-md bg-zinc-800/50 px-3 py-2.5 space-y-1">
-              <p className="text-xs text-zinc-500">Preview</p>
-              <p className="text-sm font-mono text-white" data-testid="numbering-preview">
+            <div className="bg-[#16161c] border border-[#2e2e38] px-3 py-2.5 space-y-1">
+              <p className="font-cond text-[10px] font-bold uppercase tracking-[0.12em] text-[#7c7e8a]">Preview</p>
+              <p className="text-sm font-mono text-[#eef0f3]" data-testid="numbering-preview">
                 {previewNumbers.join(', ')}
               </p>
             </div>
 
-            <Button
-              data-testid="save-numbering-btn"
-              onClick={handleSaveNumbering}
-              disabled={savingNum}
-              className="bg-white text-zinc-900 hover:bg-zinc-100"
-            >
+            <button data-testid="save-numbering-btn" onClick={handleSaveNumbering} disabled={savingNum} className={BTN_PRIMARY}>
               {savingNum ? 'Saving…' : 'Save'}
-            </Button>
+            </button>
           </div>
         )}
       </DialogContent>

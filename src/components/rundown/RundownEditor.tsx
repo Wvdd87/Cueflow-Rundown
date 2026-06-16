@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo, useCallback, useEffect, useRef, Fragment } from 'react'
-import { Plus, Heading as HeadingIcon, ChevronDown } from 'lucide-react'
+import { Plus, Heading as HeadingIcon, ChevronDown, ArrowUpToLine } from 'lucide-react'
 import {
   DndContext,
   closestCenter,
@@ -141,20 +141,14 @@ export function RundownEditor({
   const [mentionsTab, setMentionsTab] = useState<'mentions' | 'variables'>('mentions')
   const [trashOpen, setTrashOpen] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-  const [hiddenCols, setHiddenCols] = useState<Set<string>>(() =>
-    loadSet(rundown.id, 'hiddenCols')
-  )
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() =>
-    loadSet(rundown.id, 'collapsedGroups')
-  )
-  // Start with default (PN last) — matches SSR; then sync from localStorage after hydration.
+  // Per-user view state below starts at deterministic defaults so the first
+  // client render matches the server, then hydrates from localStorage after
+  // mount (see the hydrate effect) — this avoids React hydration mismatches.
+  const [hiddenCols, setHiddenCols] = useState<Set<string>>(() => new Set())
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => new Set())
   const [privateNotesIndex, setPrivateNotesIndex] = useState<number>(9999)
-  const [titleWidth, setTitleWidth] = useState<number>(() => {
-    if (typeof window === 'undefined') return 240
-    const raw = window.localStorage.getItem(lsKey(rundown.id, 'titleWidth'))
-    const n = raw ? parseInt(raw, 10) : NaN
-    return isNaN(n) ? 240 : n
-  })
+  const [titleWidth, setTitleWidth] = useState<number>(240)
+  const [hydrated, setHydrated] = useState(false)
   const lastSelectedRef = useRef<string | null>(null)
   const cuesRef = useRef(cues)
   cuesRef.current = cues
@@ -186,28 +180,39 @@ export function RundownEditor({
     return () => document.removeEventListener('keydown', onKey)
   }, [history])
 
+  // Hydrate per-user view state from localStorage after mount.
   useEffect(() => {
-    if (typeof window === 'undefined') return
-    window.localStorage.setItem(lsKey(rundown.id, 'hiddenCols'), JSON.stringify([...hiddenCols]))
-  }, [hiddenCols, rundown.id])
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    window.localStorage.setItem(lsKey(rundown.id, 'collapsedGroups'), JSON.stringify([...collapsedGroups]))
-  }, [collapsedGroups, rundown.id])
-  useEffect(() => {
-    const raw = window.localStorage.getItem(lsKey(rundown.id, 'privateNotesIndex'))
-    if (raw !== null) {
-      const n = parseInt(raw, 10)
+    setHiddenCols(loadSet(rundown.id, 'hiddenCols'))
+    setCollapsedGroups(loadSet(rundown.id, 'collapsedGroups'))
+    const tw = window.localStorage.getItem(lsKey(rundown.id, 'titleWidth'))
+    const twN = tw ? parseInt(tw, 10) : NaN
+    if (!isNaN(twN)) setTitleWidth(twN)
+    const pni = window.localStorage.getItem(lsKey(rundown.id, 'privateNotesIndex'))
+    if (pni !== null) {
+      const n = parseInt(pni, 10)
       if (!isNaN(n)) setPrivateNotesIndex(n)
     }
+    setHydrated(true)
   }, [rundown.id])
+
+  // Persist per-user view state — only after hydration, so the initial defaults
+  // never clobber the stored values.
   useEffect(() => {
+    if (!hydrated) return
+    window.localStorage.setItem(lsKey(rundown.id, 'hiddenCols'), JSON.stringify([...hiddenCols]))
+  }, [hiddenCols, rundown.id, hydrated])
+  useEffect(() => {
+    if (!hydrated) return
+    window.localStorage.setItem(lsKey(rundown.id, 'collapsedGroups'), JSON.stringify([...collapsedGroups]))
+  }, [collapsedGroups, rundown.id, hydrated])
+  useEffect(() => {
+    if (!hydrated) return
     window.localStorage.setItem(lsKey(rundown.id, 'privateNotesIndex'), String(privateNotesIndex))
-  }, [privateNotesIndex, rundown.id])
+  }, [privateNotesIndex, rundown.id, hydrated])
   useEffect(() => {
-    if (typeof window === 'undefined') return
+    if (!hydrated) return
     window.localStorage.setItem(lsKey(rundown.id, 'titleWidth'), String(titleWidth))
-  }, [titleWidth, rundown.id])
+  }, [titleWidth, rundown.id, hydrated])
 
   const visibleColumns = useMemo(
     () => columns.filter((c) => !hiddenCols.has(c.id)),
@@ -273,8 +278,49 @@ export function RundownEditor({
   )
   const live = useLiveShow(liveCues)
 
-  // Broadcast the live show state to read-only viewers
-  useBroadcastLive(rundown.id, live.activeCueId, live.status, live.isLive)
+  // ── "Jump to current cue" pill: appears when the operator scrolls the live
+  // cue out of view (to check something elsewhere in the rundown). ───────────
+  const cueScrollRef = useRef<HTMLDivElement>(null)
+  const [showJumpToCurrent, setShowJumpToCurrent] = useState(false)
+
+  const scrollActiveCueToTop = useCallback(() => {
+    const cont = cueScrollRef.current
+    if (!cont || !live.activeCueId) return
+    const row = cont.querySelector<HTMLElement>(`[data-cue-id="${live.activeCueId}"]`)
+    if (!row) return
+    const cr = cont.getBoundingClientRect()
+    const rr = row.getBoundingClientRect()
+    cont.scrollTo({ top: cont.scrollTop + (rr.top - cr.top) - (CF.headerH + 8), behavior: 'smooth' })
+  }, [live.activeCueId])
+
+  useEffect(() => {
+    const cont = cueScrollRef.current
+    if (!cont || !live.isLive) { setShowJumpToCurrent(false); return }
+    function check() {
+      if (!cont || !live.activeCueId) { setShowJumpToCurrent(false); return }
+      const row = cont.querySelector<HTMLElement>(`[data-cue-id="${live.activeCueId}"]`)
+      if (!row) { setShowJumpToCurrent(false); return }
+      const cr = cont.getBoundingClientRect()
+      const rr = row.getBoundingClientRect()
+      const top = rr.top - cr.top
+      const bottom = rr.bottom - cr.top
+      // Hidden = fully under the sticky header or fully below the viewport.
+      setShowJumpToCurrent(bottom <= CF.headerH + 2 || top >= cr.height - 2)
+    }
+    cont.addEventListener('scroll', check, { passive: true })
+    check()
+    return () => cont.removeEventListener('scroll', check)
+  }, [live.isLive, live.activeCueId])
+
+  // Broadcast the live show state (incl. timing) to read-only viewers
+  useBroadcastLive(rundown.id, {
+    activeCueId: live.activeCueId,
+    nextCueId: live.nextCueId,
+    status: live.status,
+    elapsedMs: live.elapsedMs,
+    durationMs: live.activeDurationMs,
+    isLive: live.isLive,
+  })
 
   const firstCueId = liveCues[0]?.id ?? null
   // Auto-start toggle between cues: shown only when the next cue is soft-start.
@@ -721,7 +767,13 @@ export function RundownEditor({
         <RundownHeader
           rundown={rundown}
           columns={columns}
-          onPlayClick={() => (live.isLive ? live.end() : live.start())}
+          onPlayClick={() => {
+            if (live.isLive) { live.end(); return }
+            // Start from the earliest selected cue (in document order), else cue 1.
+            const startId = liveCues.find((c) => selectedIds.has(c.id))?.id
+            setSelectedIds(new Set())
+            live.start(startId)
+          }}
           isLive={live.isLive}
           onOpenSettings={(tab) => {
             setSettingsTab(tab ?? 'display')
@@ -773,6 +825,7 @@ export function RundownEditor({
           {/* Single scroll container — header is sticky so it always aligns with rows,
               and min-width:max-content keeps horizontal scroll synced */}
           <div
+            ref={cueScrollRef}
             data-cue-scroll="1"
             className="flex-1 overflow-auto min-h-0 bg-[#09090d]"
             onClick={(e) => {
@@ -955,6 +1008,16 @@ export function RundownEditor({
             {realCueCount} {realCueCount === 1 ? 'cue' : 'cues'} · {formatDuration(totalDurationMs)} total
           </div>
         </div>
+
+        {/* Jump back to the live cue when it's scrolled out of view */}
+        {live.isLive && showJumpToCurrent && (
+          <button
+            onClick={scrollActiveCueToTop}
+            className="fixed bottom-[54px] left-1/2 -translate-x-1/2 z-40 inline-flex items-center gap-2 h-9 px-4 font-cond text-[11px] font-bold uppercase tracking-[0.12em] bg-[#f0a838] text-[#06060a] border border-[#f0a838] hover:bg-[#ffba50] shadow-[0_12px_34px_rgba(0,0,0,0.65)] transition-colors"
+          >
+            <ArrowUpToLine className="w-3.5 h-3.5" /> Jump to current cue
+          </button>
+        )}
 
         <RundownSettingsDialog
           open={settingsOpen}

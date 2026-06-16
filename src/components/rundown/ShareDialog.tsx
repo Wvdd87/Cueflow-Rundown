@@ -8,8 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { FIELD, BTN_PRIMARY } from './dialogStyles'
 import { listShares, createShare, updateShare, revokeShare } from '@/app/actions/shares'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -87,15 +86,15 @@ export function ShareDialog({ rundownId, columns, open, onOpenChange }: ShareDia
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-zinc-900 border-zinc-800 text-white sm:max-w-lg">
-        <DialogHeader>
+      <DialogContent className="bg-[#111116] border-[#2e2e38] text-white sm:max-w-lg p-0 gap-0 border-t-2 border-t-[#f0a838]">
+        <DialogHeader className="px-5 py-4 border-b border-[#1d1d24]">
           <DialogTitle className="flex items-center gap-2">
-            <Globe className="w-4 h-4" /> Read-only links
+            <Globe className="w-4 h-4 text-[#9ba0ab]" /> Read-only links
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4 mt-2">
-          <p className="text-sm text-zinc-400">
+        <div className="space-y-4 p-5">
+          <p className="text-sm text-[#9ba0ab]">
             Make a separate link per person or team. Each link can show a different
             set of columns, and follows the show live as you run it.
           </p>
@@ -103,53 +102,48 @@ export function ShareDialog({ rundownId, columns, open, onOpenChange }: ShareDia
           {/* Existing links */}
           <div className="space-y-3 max-h-72 overflow-y-auto">
             {shares.length === 0 && !loading && (
-              <p className="text-sm text-zinc-600 italic">No links yet.</p>
+              <p className="text-sm text-[#5a5c66] italic">No links yet.</p>
             )}
             {shares.map((share) => (
               <div
                 key={share.id}
                 data-testid="share-row"
-                className="rounded-md border border-zinc-800 bg-zinc-800/40 p-3 space-y-2"
+                className="border border-[#2e2e38] bg-[#16161c] p-3 space-y-2"
               >
                 <div className="flex items-center gap-2">
-                  <Input
+                  <input
                     defaultValue={share.label ?? ''}
                     onBlur={(e) => renameShare(share, e.target.value)}
                     placeholder="Link name (e.g. Camera team)"
-                    className="h-7 bg-zinc-800 border-zinc-700 text-sm text-white placeholder:text-zinc-600"
+                    className={cn(FIELD, 'h-7 py-1')}
                   />
-                  <Button
+                  <button
                     data-testid="copy-share"
-                    size="icon-sm"
                     onClick={() => handleCopy(share)}
-                    className="bg-white text-zinc-900 hover:bg-zinc-100 shrink-0"
+                    className="shrink-0 flex items-center justify-center h-7 w-7 bg-[#f0a838] text-[#06060a] hover:bg-[#ffba50] transition-colors"
                     title="Copy link"
                   >
-                    {copiedId === share.id ? (
-                      <Check className="w-3.5 h-3.5" />
-                    ) : (
-                      <Copy className="w-3.5 h-3.5" />
-                    )}
-                  </Button>
+                    {copiedId === share.id ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  </button>
                   <button
                     onClick={() => handleRevoke(share.id)}
                     title="Revoke link"
-                    className="shrink-0 text-zinc-500 hover:text-red-400 transition-colors"
+                    className="shrink-0 text-[#5a5c66] hover:text-[#ff5a73] transition-colors"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
 
-                <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+                <div className="flex items-center gap-1.5 text-xs text-[#888b96]">
                   <Link2 className="w-3 h-3 shrink-0" />
-                  <span data-testid="share-url" className="truncate">
+                  <span data-testid="share-url" className="truncate font-mono">
                     {origin}/share/{share.token}
                   </span>
                 </div>
 
                 {columns.length > 0 && (
                   <div className="pt-1">
-                    <p className="text-[10px] uppercase tracking-wider text-zinc-600 mb-1">
+                    <p className="font-cond text-[10px] font-bold uppercase tracking-[0.12em] text-[#7c7e8a] mb-1.5">
                       Visible columns
                     </p>
                     <div className="flex flex-wrap gap-1.5">
@@ -158,10 +152,10 @@ export function ShareDialog({ rundownId, columns, open, onOpenChange }: ShareDia
                           key={col.id}
                           onClick={() => toggleColumn(share, col.id)}
                           className={cn(
-                            'text-xs px-2 py-0.5 rounded-full border transition-colors',
+                            'text-xs px-2 py-0.5 border transition-colors',
                             isVisible(share, col.id)
-                              ? 'bg-zinc-700 border-zinc-600 text-zinc-100'
-                              : 'border-zinc-700 text-zinc-600 line-through'
+                              ? 'bg-[#1d1d24] border-[#3a3a48] text-[#eef0f3]'
+                              : 'border-[#2e2e38] text-[#5a5c66] line-through'
                           )}
                         >
                           {col.name}
@@ -175,25 +169,18 @@ export function ShareDialog({ rundownId, columns, open, onOpenChange }: ShareDia
           </div>
 
           {/* New link */}
-          <div className="flex items-center gap-2 border-t border-zinc-800 pt-3">
-            <Input
+          <div className="flex items-center gap-2 border-t border-[#1d1d24] pt-3">
+            <input
               data-testid="new-share-label"
               value={newLabel}
               onChange={(e) => setNewLabel(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleCreate()
-              }}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleCreate() }}
               placeholder="New link name (optional)"
-              className="bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-600"
+              className={FIELD}
             />
-            <Button
-              data-testid="create-share"
-              onClick={handleCreate}
-              disabled={loading}
-              className="bg-white text-zinc-900 hover:bg-zinc-100 gap-1.5 shrink-0"
-            >
+            <button data-testid="create-share" onClick={handleCreate} disabled={loading} className={cn(BTN_PRIMARY, 'shrink-0')}>
               <Plus className="w-4 h-4" /> Create link
-            </Button>
+            </button>
           </div>
         </div>
       </DialogContent>

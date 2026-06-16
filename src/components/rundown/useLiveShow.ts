@@ -41,7 +41,8 @@ export interface LiveShow {
   nudgeMs: number
   /** Real-time elapsed ms for the active cue — safe to call from rAF loops */
   getElapsedMs: () => number
-  start: () => void
+  /** Start the show. Optionally begin from a specific cue (defaults to the first). */
+  start: (fromCueId?: string) => void
   pause: () => void
   resume: () => void
   toggle: () => void
@@ -173,14 +174,14 @@ export function useLiveShow(cues: LiveCue[]): LiveShow {
     setActiveCueId(cueId)
   }, [])
 
-  const start = useCallback(() => {
-    const first = cues[0]
-    if (!first) return
+  const start = useCallback((fromCueId?: string) => {
+    const startCue = (fromCueId && cues.find((c) => c.id === fromCueId)) || cues[0]
+    if (!startCue) return
     accumulatedRef.current = 0
     segmentStartRef.current = performance.now()
     driftRef.current = 0
     setNudgeMs(0)
-    setActiveCueId(first.id)
+    setActiveCueId(startCue.id)
     setStatus('running')
   }, [cues])
 
