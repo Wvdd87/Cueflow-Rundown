@@ -186,6 +186,18 @@ export function SharedRundownView({
   )
   const hiddenCount = hiddenCols.size
 
+  // Total width of a cue row (gutter + all tiles + gaps + padding). Group/heading
+  // bands use this as an explicit width so they end at the My Notes edge instead
+  // of stretching to the full container width.
+  const rowWidth = useMemo(() => {
+    const colW = visibleColumns.reduce((s, c) => s + (localWidths[c.id] ?? c.width), 0)
+    return (
+      CF.rowPad * 2 +
+      CF.c1 + CF.num + CF.start + CF.dur + titleWidth + colW + myNotesWidth +
+      (5 + visibleColumns.length) * CF.gap
+    )
+  }, [visibleColumns, localWidths, titleWidth, myNotesWidth])
+
   // Search index
   const searchCues = useMemo<SearchCue[]>(() => {
     const out: SearchCue[] = []
@@ -435,7 +447,7 @@ export function SharedRundownView({
                       endMs={endMs}
                       count={item.children.length}
                       timeFormat={rundown.time_display ?? 'auto'}
-                      notesWidth={myNotesWidth}
+                      rowWidth={rowWidth}
                     />
                     {!isCollapsed && item.children.map((ch) => (
                       <ShareCueRow
@@ -568,7 +580,29 @@ function ShareCueRow({
 
   const numColor = isActive ? '#fff' : isNext ? '#eef0f3' : (cue.background_color ? ct.num : '#9ba0ab')
   const remColor = remaining == null ? '#eef0f3' : remaining < 0 ? '#ff2848' : remaining <= 30000 ? '#f0a838' : '#18d986'
-  const pct = elapsed != null && cue.duration_ms > 0 ? Math.min(100, (elapsed / cue.duration_ms) * 100) : 0
+
+  // Drive the progress bar at 60fps via rAF + a DOM ref so it moves smoothly
+  // between operator snapshots (instead of stepping with React's 200ms ticks).
+  const progressBarRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const bar = progressBarRef.current
+    if (!bar || !isActive || cue.duration_ms <= 0) return
+    const dur = cue.duration_ms
+    const paint = (el: number) => {
+      bar.style.width = `${Math.min(100, (el / dur) * 100)}%`
+      bar.style.background = el > dur ? '#ff2848' : '#f0a838'
+    }
+    if (live.status === 'running') {
+      let rafId = 0
+      const loop = () => {
+        paint(live.elapsedMs + (Date.now() - live.sentAt))
+        rafId = requestAnimationFrame(loop)
+      }
+      rafId = requestAnimationFrame(loop)
+      return () => cancelAnimationFrame(rafId)
+    }
+    paint(live.elapsedMs) // paused — freeze at the current position
+  }, [isActive, live.status, live.elapsedMs, live.sentAt, cue.duration_ms])
 
   return (
     <div ref={activeRef} data-cue-id={cue.id} style={{ marginBottom: CF.gap }}>
@@ -633,10 +667,11 @@ function ShareCueRow({
           <RichNoteCell value={note} onSave={(html) => onNoteChange(cue.id, html)} />
         </div>
 
-        {/* Live progress bar */}
+        {/* Live progress bar (width owned by the rAF loop above; constant style
+            here so React never overwrites the smooth value) */}
         {isActive && cue.duration_ms > 0 && (
           <div className="absolute pointer-events-none" style={{ left: labelIndent, right: CF.rowPad, bottom: -5, height: 3, background: 'rgba(255,255,255,0.10)', zIndex: 15 }}>
-            <div className="h-full" style={{ width: `${pct}%`, background: isOvertime ? '#ff2848' : '#f0a838' }} />
+            <div ref={progressBarRef} className="h-full" style={{ width: '0%', background: '#f0a838' }} />
           </div>
         )}
       </div>
@@ -646,7 +681,7 @@ function ShareCueRow({
 
 // ── Shared group / heading band (read-only mirror of GroupHeaderRow) ──────────
 function ShareGroupHeader({
-  heading, number, isStandalone, collapsed, onToggle, durationMs, startMs, endMs, count, timeFormat, notesWidth,
+  heading, number, isStandalone, collapsed, onToggle, durationMs, startMs, endMs, count, timeFormat, rowWidth,
 }: {
   heading: Cue
   number: string
@@ -658,7 +693,7 @@ function ShareGroupHeader({
   endMs: number
   count: number
   timeFormat: 'auto' | '24h' | '12h' | '12h_no_ampm'
-  notesWidth: number
+  rowWidth: number
 }) {
   const ct = textOn(heading.background_color)
   const isGroup = !isStandalone
@@ -672,7 +707,7 @@ function ShareGroupHeader({
   }
 
   return (
-    <div className="flex items-stretch" data-cue-id={heading.id} style={{ minHeight: CF.minRowH, marginTop: isGroup ? 18 : 30, marginBottom: CF.gap, gap: CF.gap, padding: `0 ${CF.rowPad}px` }}>
+    <div className="flex items-stretch" data-cue-id={heading.id} style={{ width: rowWidth, minHeight: CF.minRowH, marginTop: isGroup ? 18 : 30, marginBottom: CF.gap, gap: CF.gap, padding: `0 ${CF.rowPad}px` }}>
       <div className="shrink-0" style={{ width: CF.c1 }} />
       <div className="flex-1 min-w-0 flex items-center" style={{ background: bandBg, border: `1px solid ${bandBorder}`, paddingRight: 14 }}>
         <div className="shrink-0 flex items-center justify-center" style={{ width: CF.num }}>
@@ -696,7 +731,6 @@ function ShareGroupHeader({
           </button>
         )}
       </div>
-      <div data-share-notes-col className="shrink-0" style={{ width: notesWidth }} />
     </div>
   )
 }
