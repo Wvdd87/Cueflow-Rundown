@@ -1,7 +1,6 @@
 'use client'
 
 import { logout } from '@/app/actions/auth'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -9,7 +8,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { LogOut } from 'lucide-react'
+import { LogOut, User, ChevronDown } from 'lucide-react'
 
 interface UserMenuProps {
   email: string
@@ -25,24 +24,26 @@ export function UserMenu({ email, fullName }: UserMenuProps) {
     <DropdownMenu>
       <DropdownMenuTrigger
         render={
-          <button className="rounded-full focus:outline-none focus:ring-2 focus:ring-zinc-600" />
+          <button className="inline-flex items-center gap-2 h-9 px-2 bg-transparent border border-[#22222a] hover:border-[#3a3a48] hover:bg-[#111116] transition-colors cursor-pointer" />
         }
       >
-        <Avatar className="w-8 h-8 cursor-pointer hover:ring-2 hover:ring-zinc-600 transition-all">
-          <AvatarFallback className="bg-zinc-700 text-zinc-300 text-xs font-medium">
-            {initials}
-          </AvatarFallback>
-        </Avatar>
+        <span className="w-6 h-6 bg-[#22222a] flex items-center justify-center font-cond text-[10px] font-bold text-[#c8c9d0]">
+          {initials}
+        </span>
+        <ChevronDown className="w-3 h-3 text-[#9ba0ab]" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="bg-zinc-900 border-zinc-700 text-zinc-200 w-52">
-        <div className="px-2 py-1.5">
-          {fullName && <p className="text-sm font-medium text-white truncate">{fullName}</p>}
-          <p className="text-xs text-zinc-500 truncate">{email}</p>
+      <DropdownMenuContent align="end" className="bg-[#111116] border-[#2e2e38] text-[#c8c9d0] w-[230px] p-0">
+        <div className="px-4 py-3.5 border-b border-[#1d1d24]">
+          {fullName && <p className="text-[13px] font-semibold text-[#eef0f3] truncate">{fullName}</p>}
+          <p className="text-[11px] text-[#9ba0ab] truncate mt-0.5">{email}</p>
         </div>
-        <DropdownMenuSeparator className="bg-zinc-800" />
+        <DropdownMenuItem className="gap-2.5 px-4 py-2.5 font-cond text-[11px] font-bold uppercase tracking-[0.1em] text-[#c8c9d0] focus:bg-[#16161c] focus:text-[#eef0f3] cursor-pointer">
+          <User className="w-3.5 h-3.5 text-[#9ba0ab]" /> Account settings
+        </DropdownMenuItem>
+        <DropdownMenuSeparator className="bg-[#1d1d24]" />
         <DropdownMenuItem
           onClick={() => logout()}
-          className="gap-2 focus:bg-zinc-800 focus:text-white cursor-pointer"
+          className="gap-2.5 px-4 py-2.5 font-cond text-[11px] font-bold uppercase tracking-[0.1em] text-[#ff5a73] focus:bg-[#16161c] focus:text-[#ff5a73] cursor-pointer"
         >
           <LogOut className="w-3.5 h-3.5" /> Sign out
         </DropdownMenuItem>

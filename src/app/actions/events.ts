@@ -25,9 +25,35 @@ export async function createEvent(formData: FormData) {
   const name = (formData.get('name') as string)?.trim()
   if (!name) return { error: 'Name is required' }
 
+  const dateRaw = (formData.get('event_date') as string)?.trim()
+  const location = (formData.get('location') as string)?.trim() || null
+  const event_date = dateRaw || null
+
   const { error } = await supabase
     .from('events')
-    .insert({ name, team_id: teamId, created_by: userId } as never)
+    .insert({ name, team_id: teamId, created_by: userId, event_date, location } as never)
+
+  if (error) return { error: error.message }
+
+  revalidatePath('/dashboard')
+  return { success: true }
+}
+
+export async function updateEvent(
+  id: string,
+  updates: {
+    name?: string
+    event_date?: string | null
+    location?: string | null
+    archived?: boolean
+  }
+) {
+  const { supabase } = await getTeamId()
+
+  const { error } = await supabase
+    .from('events')
+    .update(updates as never)
+    .eq('id', id)
 
   if (error) return { error: error.message }
 
@@ -36,17 +62,7 @@ export async function createEvent(formData: FormData) {
 }
 
 export async function renameEvent(id: string, name: string) {
-  const { supabase } = await getTeamId()
-
-  const { error } = await supabase
-    .from('events')
-    .update({ name: name.trim() } as never)
-    .eq('id', id)
-
-  if (error) return { error: error.message }
-
-  revalidatePath('/dashboard')
-  return { success: true }
+  return updateEvent(id, { name: name.trim() })
 }
 
 export async function deleteEvent(id: string) {

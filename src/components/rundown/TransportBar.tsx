@@ -1,22 +1,12 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import {
-  Play,
-  Pause,
-  SkipForward,
-  SkipBack,
-  Square,
-  Minus,
-  Plus,
-  ChevronUp,
-} from 'lucide-react'
+import { ChevronUp } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Button } from '@/components/ui/button'
 import { formatDuration } from '@/lib/timing'
 import { cn } from '@/lib/utils'
 import type { LiveShow } from './useLiveShow'
@@ -28,6 +18,7 @@ interface TransportBarProps {
 }
 
 const NUDGE_PRESETS = [10_000, 30_000, 60_000, 300_000, 600_000]
+const LABEL = 'font-cond text-[8.5px] font-bold uppercase tracking-[0.16em] text-[#888b96]'
 
 function formatSigned(ms: number): string {
   const sign = ms < 0 ? '−' : ''
@@ -39,15 +30,15 @@ export function TransportBar({ live, cues }: TransportBarProps) {
   const [customNudge, setCustomNudge] = useState('')
   const [clock, setClock] = useState(() => new Date())
 
-  // running time-of-day clock
   useEffect(() => {
     const id = setInterval(() => setClock(new Date()), 1000)
     return () => clearInterval(id)
   }, [])
 
   const activeCue = cues.find((c) => c.id === live.activeCueId) ?? null
-  const isLastCue =
-    activeCue != null && cues[cues.length - 1]?.id === activeCue.id
+  const isLastCue = activeCue != null && cues[cues.length - 1]?.id === activeCue.id
+  const overtime = live.isOvertime
+  const remaining = live.remainingMs
 
   function applyCustomNudge(direction: 1 | -1) {
     const seconds = parseFloat(customNudge)
@@ -61,109 +52,72 @@ export function TransportBar({ live, cues }: TransportBarProps) {
   const onTime = Math.abs(overUnder) < 1000
 
   return (
-    <div className="shrink-0 border-t border-zinc-800 bg-zinc-900/95 backdrop-blur px-4 py-2.5 flex items-center gap-4">
-      {/* Status + elapsed (count-up) + current cue */}
-      <div className="flex items-center gap-3 min-w-0 flex-1">
-        <span className="flex items-center gap-1.5 shrink-0">
-          <span
-            className={cn(
-              'w-2.5 h-2.5 rounded-full',
-              live.status === 'running'
-                ? 'bg-red-500 animate-pulse'
-                : 'bg-amber-500'
-            )}
-          />
-        </span>
+    <div className="relative shrink-0 flex items-center gap-4 h-[60px] bg-[#0d0d12] border-b border-[#22222a] px-[18px]">
+      {/* Amber underline (UI-kit navbar signature) */}
+      <div className="absolute left-0 right-0 -bottom-px h-0.5 bg-[#f0a838] opacity-60 pointer-events-none" />
+
+      {/* Hero remaining countdown — aligned with the cue-number column */}
+      <div className="flex items-center gap-3 flex-1 min-w-0 pl-12">
         <div className="shrink-0">
           <span
-            className={cn(
-              'text-2xl font-mono font-semibold tabular-nums leading-none',
-              live.isOvertime ? 'text-red-500' : 'text-white'
-            )}
-            data-testid="transport-elapsed"
+            data-testid="transport-remaining"
+            className="font-mono text-[30px] font-bold tabular-nums leading-none"
+            style={{ color: overtime ? '#ff2848' : '#f0a838' }}
           >
-            {formatDuration(live.elapsedMs)}
+            {(overtime ? '+' : '') + formatDuration(Math.abs(remaining ?? 0))}
           </span>
-          <span className="text-[10px] text-zinc-500 ml-1.5">
-            / {formatDuration(live.activeDurationMs)}
+          <span className="font-mono text-[11px] text-[#888b96] ml-[18px]">
+            {formatDuration(live.elapsedMs)} / {formatDuration(live.activeDurationMs)}
             {live.nudgeMs !== 0 && (
-              <span className="text-amber-400">
-                {' '}
-                ({live.nudgeMs > 0 ? '+' : '−'}
-                {formatDuration(Math.abs(live.nudgeMs))})
+              <span className="text-[#f0a838]">
+                {' '}({live.nudgeMs > 0 ? '+' : '−'}{formatDuration(Math.abs(live.nudgeMs))})
               </span>
             )}
           </span>
         </div>
-        <div className="min-w-0 hidden md:block">
-          <p
-            data-testid="transport-cue-title"
-            className="text-sm text-white truncate"
-          >
-            {activeCue?.title || (
-              <span className="text-zinc-600 italic">Untitled cue</span>
-            )}
-          </p>
-          <p className="text-[11px] text-zinc-500">
-            Cue {activeCue?.cue_number || '·'}
-          </p>
-        </div>
       </div>
 
       {/* Nudge */}
-      <div className="flex items-center gap-1 shrink-0">
-        <Button
-          variant="outline"
-          size="sm"
+      <div className="flex items-center shrink-0 relative">
+        <button
           onClick={() => live.nudge(-60_000)}
-          className="bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700 hover:text-white font-mono"
+          className="h-8 px-2.5 inline-flex items-center bg-[#16161c] text-[#c8c9d0] border border-[#2e2e38] hover:bg-[#1d1d24] font-mono text-xs transition-colors"
         >
-          <Minus className="w-3 h-3" />
-          1m
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
+          −1m
+        </button>
+        <button
           onClick={() => live.nudge(60_000)}
-          className="bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700 hover:text-white font-mono"
+          className="h-8 px-2.5 inline-flex items-center bg-[#16161c] text-[#c8c9d0] border border-[#2e2e38] border-l-0 hover:bg-[#1d1d24] font-mono text-xs transition-colors"
         >
-          <Plus className="w-3 h-3" />
-          1m
-        </Button>
-
+          +1m
+        </button>
         <DropdownMenu open={nudgeOpen} onOpenChange={setNudgeOpen}>
           <DropdownMenuTrigger
             render={
-              <button className="p-1.5 rounded text-zinc-400 hover:text-white hover:bg-zinc-700 transition-colors" />
+              <button className="h-8 w-7 inline-flex items-center justify-center bg-[#16161c] text-[#9ba0ab] border border-[#2e2e38] border-l-0 hover:text-[#eef0f3] transition-colors" />
             }
           >
-            <ChevronUp className="w-4 h-4" />
+            <ChevronUp className="w-3 h-3" />
           </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align="center"
-            side="top"
-            className="bg-zinc-900 border-zinc-700 text-zinc-200 w-56 p-3"
-          >
-            <p className="text-[11px] text-zinc-500 mb-2 uppercase tracking-wider">
-              Adjust active cue
-            </p>
-            <div className="grid grid-cols-5 gap-1 mb-2">
+          <DropdownMenuContent align="end" side="top" className="bg-[#111116] border-[#2e2e38] w-[260px] p-3">
+            <p className={cn(LABEL, 'mb-2.5')}>Adjust active cue</p>
+            <div className="grid grid-cols-5 gap-[3px] mb-1.5">
               {NUDGE_PRESETS.map((ms) => (
                 <button
-                  key={ms}
+                  key={`m${ms}`}
                   onClick={() => live.nudge(-ms)}
-                  className="text-xs py-1 rounded bg-zinc-800 hover:bg-red-900/60 text-zinc-300 hover:text-white transition-colors font-mono"
+                  className="py-1.5 bg-[#16161c] text-[#ff5a73] border border-[#2e2e38] hover:bg-[rgba(255,40,72,0.12)] font-mono text-[10px] transition-colors"
                 >
                   −{formatDuration(ms)}
                 </button>
               ))}
             </div>
-            <div className="grid grid-cols-5 gap-1 mb-3">
+            <div className="grid grid-cols-5 gap-[3px] mb-2.5">
               {NUDGE_PRESETS.map((ms) => (
                 <button
-                  key={ms}
+                  key={`p${ms}`}
                   onClick={() => live.nudge(ms)}
-                  className="text-xs py-1 rounded bg-zinc-800 hover:bg-emerald-900/60 text-zinc-300 hover:text-white transition-colors font-mono"
+                  className="py-1.5 bg-[#16161c] text-[#18d986] border border-[#2e2e38] hover:bg-[rgba(24,217,134,0.12)] font-mono text-[10px] transition-colors"
                 >
                   +{formatDuration(ms)}
                 </button>
@@ -173,112 +127,80 @@ export function TransportBar({ live, cues }: TransportBarProps) {
               <input
                 value={customNudge}
                 onChange={(e) => setCustomNudge(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') applyCustomNudge(1)
-                }}
+                onKeyDown={(e) => { if (e.key === 'Enter') applyCustomNudge(1) }}
                 placeholder="secs"
                 inputMode="numeric"
-                className="flex-1 min-w-0 bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs text-white outline-none focus:ring-1 focus:ring-zinc-500"
+                className="flex-1 min-w-0 bg-[#16161c] border border-[#2e2e38] px-2 py-1.5 text-xs text-[#eef0f3] font-mono outline-none focus:border-[#3a3a48]"
               />
-              <button
-                onClick={() => applyCustomNudge(-1)}
-                className="px-2 py-1 rounded bg-zinc-800 hover:bg-red-900/60 text-zinc-300 hover:text-white text-xs transition-colors"
-              >
-                <Minus className="w-3 h-3" />
-              </button>
-              <button
-                onClick={() => applyCustomNudge(1)}
-                className="px-2 py-1 rounded bg-zinc-800 hover:bg-emerald-900/60 text-zinc-300 hover:text-white text-xs transition-colors"
-              >
-                <Plus className="w-3 h-3" />
-              </button>
+              <button onClick={() => applyCustomNudge(-1)} className="px-2 py-1.5 bg-[#16161c] text-[#ff5a73] border border-[#2e2e38] hover:bg-[rgba(255,40,72,0.12)] text-xs">−</button>
+              <button onClick={() => applyCustomNudge(1)} className="px-2 py-1.5 bg-[#16161c] text-[#18d986] border border-[#2e2e38] hover:bg-[rgba(24,217,134,0.12)] text-xs">+</button>
             </div>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
 
-      {/* Transport */}
-      <div className="flex items-center gap-1.5 shrink-0">
-        <Button
-          size="icon-sm"
-          variant="ghost"
+      {/* Transport buttons */}
+      <div className="flex items-center gap-2 shrink-0">
+        <button
           onClick={live.prev}
           disabled={!live.prevCueId}
-          className="text-zinc-300 hover:text-white hover:bg-zinc-700 disabled:opacity-30"
           title="Previous cue"
+          className="w-[34px] h-[34px] inline-flex items-center justify-center bg-[#16161c] border border-[#2e2e38] disabled:opacity-40"
+          style={{ color: live.prevCueId ? '#c8c9d0' : '#3a3a48' }}
         >
-          <SkipBack className="w-4 h-4 fill-current" />
-        </Button>
-        <Button
-          size="icon"
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polygon points="19 20 9 12 19 4 19 20" fill="currentColor" />
+            <line x1="5" y1="19" x2="5" y2="5" />
+          </svg>
+        </button>
+        <button
           onClick={live.toggle}
-          className={cn(
-            'rounded-full',
-            live.status === 'running'
-              ? 'bg-amber-500 hover:bg-amber-600 text-zinc-950'
-              : 'bg-emerald-500 hover:bg-emerald-600 text-zinc-950'
-          )}
           title={live.status === 'running' ? 'Pause' : 'Resume'}
+          className="w-11 h-[42px] inline-flex items-center justify-center text-[#06060a]"
+          style={{ background: live.status === 'running' ? '#f0a838' : '#18d986' }}
         >
           {live.status === 'running' ? (
-            <Pause className="w-4 h-4 fill-current" />
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="#06060a"><rect x="6" y="4" width="4" height="16" /><rect x="14" y="4" width="4" height="16" /></svg>
           ) : (
-            <Play className="w-4 h-4 fill-current" />
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="#06060a"><polygon points="5 3 19 12 5 21 5 3" /></svg>
           )}
-        </Button>
-        <Button
-          size="sm"
+        </button>
+        <button
           onClick={live.next}
-          className={cn(
-            'gap-1.5',
-            isLastCue
-              ? 'bg-red-600 hover:bg-red-700 text-white'
-              : 'bg-white text-zinc-900 hover:bg-zinc-100'
-          )}
           title={isLastCue ? 'End show' : 'Next cue'}
+          className="h-[42px] px-4 inline-flex items-center gap-1.5 font-cond text-[11px] font-bold uppercase tracking-[0.12em]"
+          style={{ background: isLastCue ? '#ff2848' : '#f0a838', color: isLastCue ? '#fff' : '#06060a' }}
         >
           {isLastCue ? (
             <>
-              <Square className="w-3 h-3 fill-current" />
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" /></svg>
               End
             </>
           ) : (
             <>
               Next
-              <SkipForward className="w-3.5 h-3.5 fill-current" />
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 4 15 12 5 20 5 4" /><rect x="17" y="4" width="2" height="16" /></svg>
             </>
           )}
-        </Button>
+        </button>
       </div>
 
-      {/* Clock + Over/Under */}
-      <div className="hidden lg:flex items-center gap-4 shrink-0 pl-2 border-l border-zinc-800">
+      {/* Clock + over/under */}
+      <div className="hidden lg:flex items-center gap-[18px] shrink-0 pl-3.5 border-l border-[#22222a]">
         <div className="text-right">
-          <p className="text-[10px] text-zinc-500 uppercase tracking-wider leading-none">
-            Time of day
-          </p>
-          <p className="text-sm font-mono tabular-nums text-zinc-300">
+          <p className={cn(LABEL, 'leading-none')}>Time of day</p>
+          <p className="font-mono text-[13px] tabular-nums text-[#c8c9d0]">
             {clock.toLocaleTimeString('en-US', { hour12: true })}
           </p>
         </div>
         <div className="text-right">
-          <p className="text-[10px] text-zinc-500 uppercase tracking-wider leading-none">
-            Over / Under
-          </p>
+          <p className={cn(LABEL, 'leading-none')}>Over / Under</p>
           <p
             data-testid="transport-overunder"
-            className={cn(
-              'text-sm font-mono tabular-nums',
-              onTime
-                ? 'text-zinc-400'
-                : overUnder > 0
-                  ? 'text-red-400'
-                  : 'text-emerald-400'
-            )}
+            className="font-mono text-[13px] tabular-nums"
+            style={{ color: onTime ? '#9ba0ab' : overUnder > 0 ? '#ff5a73' : '#18d986' }}
           >
-            {onTime
-              ? 'on time'
-              : `${formatSigned(overUnder)} ${overUnder > 0 ? 'late' : 'early'}`}
+            {onTime ? 'on time' : `${formatSigned(overUnder)} ${overUnder > 0 ? 'late' : 'early'}`}
           </p>
         </div>
       </div>

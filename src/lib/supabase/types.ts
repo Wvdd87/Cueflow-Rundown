@@ -67,6 +67,9 @@ export type Database = {
           team_id: string
           name: string
           logo_url: string | null
+          event_date: string | null
+          location: string | null
+          archived: boolean
           created_by: string
           created_at: string
           updated_at: string
@@ -76,6 +79,9 @@ export type Database = {
           team_id: string
           name: string
           logo_url?: string | null
+          event_date?: string | null
+          location?: string | null
+          archived?: boolean
           created_by: string
           created_at?: string
           updated_at?: string
@@ -84,6 +90,9 @@ export type Database = {
           id?: string
           name?: string
           logo_url?: string | null
+          event_date?: string | null
+          location?: string | null
+          archived?: boolean
           updated_at?: string
         }
       }

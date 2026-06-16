@@ -3,9 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import {
-  ArrowLeft,
   Play,
-  CalendarDays,
   ChevronDown,
   LayoutDashboard,
   Settings as SettingsIcon,
@@ -30,7 +28,6 @@ import {
 import { ShareDialog } from './ShareDialog'
 import { RundownSearch } from './RundownSearch'
 import type { SearchCue } from './RundownSearch'
-import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -39,7 +36,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { toast } from 'sonner'
-import { cn } from '@/lib/utils'
 import {
   STATUS_CONFIG,
   RUNDOWN_STATUSES,
@@ -67,6 +63,18 @@ interface RundownHeaderProps {
   onSearchSelect: (id: string) => void
 }
 
+const STATUS_DESC: Record<RundownStatus, string> = {
+  draft: 'Work in progress',
+  awaiting_data: 'Waiting on data',
+  approved: 'Signed off',
+  finalized: 'Locked for show',
+  rejected: 'Needs changes',
+}
+
+// Shared CueFlow dropdown item class for the Rundown menu
+const MENU_ITEM =
+  'gap-2.5 px-4 py-2.5 font-cond text-[11px] font-bold uppercase tracking-[0.1em] text-[#c8c9d0] focus:bg-[#16161c] focus:text-[#eef0f3] cursor-pointer'
+
 export function RundownHeader({
   rundown,
   columns,
@@ -90,6 +98,7 @@ export function RundownHeader({
   const [status, setStatus] = useState<RundownStatus>(
     normalizeStatus(rundown.status)
   )
+  const [statusOpen, setStatusOpen] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -112,6 +121,7 @@ export function RundownHeader({
 
   async function changeStatus(next: RundownStatus) {
     setStatus(next)
+    setStatusOpen(false)
     const result = await updateRundownStatus(rundown.id, next)
     if (result?.error) toast.error(result.error)
   }
@@ -122,97 +132,105 @@ export function RundownHeader({
     else toast.success('Saved as template')
   }
 
-  const formattedDate = rundown.show_date
-    ? new Date(rundown.show_date).toLocaleDateString('en-US', {
-        weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
-      })
-    : null
-
-  const meta = STATUS_CONFIG[status]
-  const StatusIcon = meta.icon
+  const cf = STATUS_CONFIG[status].cf
 
   return (
-    <header className="flex items-center gap-3 px-4 h-14 border-b border-zinc-800 bg-zinc-950 shrink-0">
+    <header className="flex items-center gap-3 px-5 h-14 border-b border-[#1d1d24] bg-[#07070a] shrink-0">
+      {/* Amber logo / back-to-dashboard */}
       <Link
         href="/dashboard"
-        className="text-zinc-500 hover:text-zinc-300 transition-colors shrink-0"
+        title="Back to dashboard"
+        className="w-[30px] h-[30px] bg-[#f0a838] hover:bg-[#ffba50] flex items-center justify-center shrink-0 transition-colors"
       >
-        <ArrowLeft className="w-4 h-4" />
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#06060a" strokeWidth="2.5" strokeLinecap="square">
+          <line x1="7" y1="6" x2="20" y2="6" />
+          <line x1="7" y1="12" x2="20" y2="12" />
+          <line x1="7" y1="18" x2="20" y2="18" />
+          <line x1="3" y1="6" x2="3" y2="6" strokeLinecap="round" strokeWidth="3.2" />
+          <line x1="3" y1="12" x2="3" y2="12" strokeLinecap="round" strokeWidth="3.2" />
+          <line x1="3" y1="18" x2="3" y2="18" strokeLinecap="round" strokeWidth="3.2" />
+        </svg>
       </Link>
 
-      <div className="flex items-center gap-2 flex-1 min-w-0">
-        {editing ? (
-          <input
-            ref={inputRef}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            onBlur={saveName}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') saveName()
-              if (e.key === 'Escape') { setEditing(false); setName(rundown.name) }
-            }}
-            className="bg-transparent text-white font-medium text-sm outline-none border-b border-zinc-500 max-w-md"
-          />
-        ) : (
-          <button
-            onClick={() => setEditing(true)}
-            className="text-white font-medium text-sm hover:text-zinc-200 transition-colors truncate max-w-md text-left"
-          >
-            {name}
-          </button>
-        )}
-
-        {/* Status badge */}
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <button
-                data-testid="status-badge"
-                title="Change status"
-                className={cn(
-                  'flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full shrink-0 hover:opacity-90 transition-opacity',
-                  meta.badge
-                )}
-              />
-            }
-          >
-            <StatusIcon className="w-3 h-3" />
-            {meta.label}
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="bg-zinc-900 border-zinc-700 text-zinc-200 w-44">
-            {RUNDOWN_STATUSES.map((s) => {
-              const Icon = STATUS_CONFIG[s].icon
-              return (
-                <DropdownMenuItem
-                  key={s}
-                  onClick={() => changeStatus(s)}
-                  className="gap-2 text-xs focus:bg-zinc-800 cursor-pointer"
-                >
-                  <span className={cn('w-2 h-2 rounded-full', STATUS_CONFIG[s].dot)} />
-                  <Icon className="w-3.5 h-3.5 text-zinc-400" />
-                  {STATUS_CONFIG[s].label}
-                </DropdownMenuItem>
-              )
-            })}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-
-      {formattedDate && (
-        <div className="hidden md:flex items-center gap-1.5 text-xs text-zinc-500">
-          <CalendarDays className="w-3.5 h-3.5" />
-          {formattedDate}
-        </div>
+      {/* Editable rundown name */}
+      {editing ? (
+        <input
+          ref={inputRef}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onBlur={saveName}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') saveName()
+            if (e.key === 'Escape') { setEditing(false); setName(rundown.name) }
+          }}
+          className="bg-transparent text-[#eef0f3] font-semibold text-base outline-none border-b border-[#f0a838] w-64 shrink-0"
+        />
+      ) : (
+        <button
+          onClick={() => setEditing(true)}
+          className="text-[#eef0f3] hover:text-white font-semibold text-base tracking-[-0.01em] truncate max-w-md text-left shrink-0 transition-colors"
+        >
+          {name}
+        </button>
       )}
+
+      {/* Status badge + selector */}
+      <DropdownMenu open={statusOpen} onOpenChange={setStatusOpen}>
+        <DropdownMenuTrigger
+          render={
+            <button
+              data-testid="status-badge"
+              title="Change status"
+              className="inline-flex items-center gap-1.5 px-[7px] py-[3px] font-cond text-[10px] font-bold uppercase tracking-[0.14em] cursor-pointer shrink-0"
+              style={{ background: cf.bg, border: `1px solid ${cf.bd}`, color: cf.fg }}
+            />
+          }
+        >
+          <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'currentColor' }} />
+          {STATUS_CONFIG[status].label}
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          align="start"
+          className="bg-[#111116] border-[#3a3a48] text-[#c8c9d0] w-56 p-0"
+        >
+          {RUNDOWN_STATUSES.map((s) => {
+            const sc = STATUS_CONFIG[s].cf
+            const sel = status === s
+            return (
+              <DropdownMenuItem
+                key={s}
+                onClick={() => changeStatus(s)}
+                className="gap-2.5 px-3 py-2.5 cursor-pointer focus:bg-[#16161c] data-[sel=true]:bg-[rgba(240,168,56,0.10)]"
+                data-sel={sel}
+                style={sel ? { borderLeft: '2px solid #f0a838', paddingLeft: 10 } : undefined}
+              >
+                <span className="w-[7px] h-[7px] rounded-full shrink-0" style={{ background: sc.dot }} />
+                <span className="flex-1 min-w-0">
+                  <span className={sel ? 'block text-[12.5px] text-[#eef0f3]' : 'block text-[12.5px] text-[#c8c9d0]'}>
+                    {STATUS_CONFIG[s].label}
+                  </span>
+                  <span className="block font-mono text-[10.5px] text-[#7c7e8a] mt-px">
+                    {STATUS_DESC[s]}
+                  </span>
+                </span>
+                {sel && <span className="font-mono text-[11px] text-[#f0a838]">✓</span>}
+              </DropdownMenuItem>
+            )
+          })}
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <div className="flex-1" />
 
       <RundownSearch cues={searchCues} onSelect={onSearchSelect} />
 
-      <div className="flex items-center gap-2">
+      {/* Undo / Redo */}
+      <div className="flex items-center">
         <button
           onClick={onUndo}
           disabled={!canUndo}
           title={canUndo ? `Undo: ${undoLabel} (⌘Z)` : 'Nothing to undo'}
-          className="p-1.5 rounded text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+          className="w-8 h-8 flex items-center justify-center text-[#9ba0ab] hover:text-[#eef0f3] hover:bg-[#16161c] transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
         >
           <Undo2 className="w-4 h-4" />
         </button>
@@ -220,117 +238,94 @@ export function RundownHeader({
           onClick={onRedo}
           disabled={!canRedo}
           title={canRedo ? `Redo: ${redoLabel} (⌘⇧Z)` : 'Nothing to redo'}
-          className="p-1.5 rounded text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+          className="w-8 h-8 flex items-center justify-center text-[#9ba0ab] hover:text-[#eef0f3] hover:bg-[#16161c] transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
         >
           <Redo2 className="w-4 h-4" />
         </button>
+      </div>
 
-        <Button
-          size="sm"
+      {/* Run show / End show */}
+      {isLive ? (
+        <button
           onClick={onPlayClick}
-          className={
-            isLive
-              ? 'bg-green-600 hover:bg-green-700 text-white gap-1.5'
-              : 'bg-white text-zinc-900 hover:bg-zinc-100 gap-1.5'
+          className="inline-flex items-center gap-2 h-9 px-4 font-cond text-[11px] font-bold uppercase tracking-[0.14em] bg-[rgba(255,40,72,0.12)] text-[#ff4663] border border-[#ff2848] hover:bg-[rgba(255,40,72,0.20)] cursor-pointer transition-colors"
+        >
+          <span className="live-dot w-[7px] h-[7px] rounded-full bg-[#ff2848] inline-block" />
+          End show
+        </button>
+      ) : (
+        <button
+          onClick={onPlayClick}
+          className="inline-flex items-center gap-2 h-9 px-5 font-cond text-[11px] font-bold uppercase tracking-[0.14em] bg-[#f0a838] text-[#06060a] border border-[#f0a838] hover:bg-[#ffba50] hover:border-[#ffba50] cursor-pointer transition-colors"
+        >
+          <Play className="w-[11px] h-[11px] fill-[#06060a]" />
+          Run show
+        </button>
+      )}
+
+      {/* Rundown menu */}
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <button
+              data-testid="rundown-menu"
+              className="inline-flex items-center gap-1.5 h-9 px-3.5 font-cond text-[11px] font-bold uppercase tracking-[0.12em] bg-[#111116] text-[#c8c9d0] border border-[#22222a] hover:border-[#3a3a48] hover:bg-[#16161c] cursor-pointer transition-colors"
+            />
           }
         >
-          <Play className="w-3.5 h-3.5" />
-          {isLive ? 'Live' : 'Run show'}
-        </Button>
+          Rundown
+          <ChevronDown className="w-3 h-3 text-[#9ba0ab]" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="bg-[#111116] border-[#2e2e38] text-[#c8c9d0] w-60 p-0">
+          <DropdownMenuItem render={<Link href="/dashboard" />} className={MENU_ITEM}>
+            <LayoutDashboard className="w-3.5 h-3.5 text-[#9ba0ab]" /> Dashboard
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => onOpenSettings()} className={MENU_ITEM}>
+            <SettingsIcon className="w-3.5 h-3.5 text-[#9ba0ab]" /> Settings
+          </DropdownMenuItem>
 
-        {/* Rundown menu */}
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <Button
-                data-testid="rundown-menu"
-                variant="outline"
-                size="sm"
-                className="bg-zinc-900 border-zinc-700 text-zinc-200 hover:bg-zinc-800 gap-1"
-              />
-            }
+          <DropdownMenuSeparator className="bg-[#1d1d24]" />
+
+          <DropdownMenuItem onClick={() => onOpenMentions('mentions')} className={MENU_ITEM}>
+            <AtSign className="w-3.5 h-3.5 text-[#9ba0ab]" /> Mentions
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => onOpenMentions('variables')} className={MENU_ITEM}>
+            <DollarSign className="w-3.5 h-3.5 text-[#9ba0ab]" /> Text variables
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={onOpenTrash} data-testid="open-trash-menu-item" className={MENU_ITEM}>
+            <Trash2 className="w-3.5 h-3.5 text-[#9ba0ab]" /> Trash
+          </DropdownMenuItem>
+
+          <DropdownMenuSeparator className="bg-[#1d1d24]" />
+
+          <DropdownMenuItem data-testid="save-as-template" onClick={handleSaveTemplate} className={MENU_ITEM}>
+            <LayoutTemplate className="w-3.5 h-3.5 text-[#9ba0ab]" /> Save as template
+          </DropdownMenuItem>
+          <DropdownMenuItem data-testid="share-menu-item" onClick={() => setShareOpen(true)} className={MENU_ITEM}>
+            <Share2 className="w-3.5 h-3.5 text-[#9ba0ab]" /> Share (read-only link)
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            render={<a href={`/rundown/${rundown.id}/export/pdf`} target="_blank" rel="noopener noreferrer" />}
+            className={MENU_ITEM}
           >
-            Rundown
-            <ChevronDown className="w-3.5 h-3.5" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="bg-zinc-900 border-zinc-700 text-zinc-200 w-52">
-            <DropdownMenuItem
-              render={<Link href="/dashboard" />}
-              className="gap-2 text-sm focus:bg-zinc-800 cursor-pointer"
-            >
-              <LayoutDashboard className="w-4 h-4" /> Dashboard
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => onOpenSettings()}
-              className="gap-2 text-sm focus:bg-zinc-800 cursor-pointer"
-            >
-              <SettingsIcon className="w-4 h-4" /> Settings
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => onOpenMentions('mentions')}
-              className="gap-2 text-sm focus:bg-zinc-800 cursor-pointer"
-            >
-              <AtSign className="w-4 h-4" /> Mentions
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => onOpenMentions('variables')}
-              className="gap-2 text-sm focus:bg-zinc-800 cursor-pointer"
-            >
-              <DollarSign className="w-4 h-4" /> Text Variables
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => onOpenTrash()}
-              className="gap-2 text-sm focus:bg-zinc-800 cursor-pointer"
-              data-testid="open-trash-menu-item"
-            >
-              <Trash2 className="w-4 h-4" /> Trash
-            </DropdownMenuItem>
+            <FileDown className="w-3.5 h-3.5 text-[#9ba0ab]" /> Export PDF
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            render={<a href={`/rundown/${rundown.id}/export/csv`} />}
+            className={MENU_ITEM}
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5 text-[#9ba0ab]" /> Export CSV
+          </DropdownMenuItem>
+          <SoonItem icon={<MonitorPlay className="w-3.5 h-3.5" />} label="Generate output" />
+          <SoonItem icon={<Code className="w-3.5 h-3.5" />} label="API docs" />
 
-            <DropdownMenuSeparator className="bg-zinc-800" />
+          <DropdownMenuSeparator className="bg-[#1d1d24]" />
 
-            <DropdownMenuItem
-              data-testid="save-as-template"
-              onClick={handleSaveTemplate}
-              className="gap-2 text-sm focus:bg-zinc-800 cursor-pointer"
-            >
-              <LayoutTemplate className="w-4 h-4" /> Save as template
-            </DropdownMenuItem>
-
-            <DropdownMenuSeparator className="bg-zinc-800" />
-
-            <DropdownMenuItem
-              data-testid="share-menu-item"
-              onClick={() => setShareOpen(true)}
-              className="gap-2 text-sm focus:bg-zinc-800 cursor-pointer"
-            >
-              <Share2 className="w-4 h-4" /> Share (read-only link)
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              render={<a href={`/rundown/${rundown.id}/export/pdf`} target="_blank" rel="noopener noreferrer" />}
-              className="gap-2 text-sm focus:bg-zinc-800 cursor-pointer"
-            >
-              <FileDown className="w-4 h-4" /> Export PDF
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              render={<a href={`/rundown/${rundown.id}/export/csv`} />}
-              className="gap-2 text-sm focus:bg-zinc-800 cursor-pointer"
-            >
-              <FileSpreadsheet className="w-4 h-4" /> Export CSV
-            </DropdownMenuItem>
-            <SoonItem icon={<MonitorPlay className="w-4 h-4" />} label="Generate Output" />
-            <SoonItem icon={<Code className="w-4 h-4" />} label="API Docs" />
-
-            <DropdownMenuSeparator className="bg-zinc-800" />
-
-            <DropdownMenuItem
-              onClick={onResetTiming}
-              className="gap-2 text-sm focus:bg-zinc-800 cursor-pointer"
-            >
-              <RotateCcw className="w-4 h-4" /> Reset rundown timing
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
+          <DropdownMenuItem onClick={onResetTiming} className={MENU_ITEM}>
+            <RotateCcw className="w-3.5 h-3.5 text-[#9ba0ab]" /> Reset rundown timing
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
 
       <ShareDialog
         rundownId={rundown.id}
@@ -346,12 +341,12 @@ function SoonItem({ icon, label }: { icon: React.ReactNode; label: string }) {
   return (
     <DropdownMenuItem
       disabled
-      className="gap-2 text-sm text-zinc-500 justify-between cursor-not-allowed"
+      className="gap-2.5 px-4 py-2.5 font-cond text-[11px] font-bold uppercase tracking-[0.1em] text-[#5a5c66] justify-between cursor-not-allowed"
     >
-      <span className="flex items-center gap-2">
-        {icon} {label}
+      <span className="flex items-center gap-2.5">
+        <span className="text-[#5a5c66]">{icon}</span> {label}
       </span>
-      <span className="text-[10px] text-zinc-600 border border-zinc-700 rounded px-1">
+      <span className="text-[9px] text-[#5a5c66] border border-[#2e2e38] px-1 normal-case tracking-normal">
         Soon
       </span>
     </DropdownMenuItem>

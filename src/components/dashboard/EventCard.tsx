@@ -1,9 +1,21 @@
 'use client'
 
 import { useState } from 'react'
-import { Folder, ChevronDown, ChevronRight, MoreHorizontal, Pencil, Trash2, Plus, Check, X } from 'lucide-react'
-import { renameEvent, deleteEvent } from '@/app/actions/events'
-import { Button } from '@/components/ui/button'
+import {
+  ChevronDown,
+  ChevronRight,
+  MoreHorizontal,
+  Pencil,
+  Trash2,
+  Plus,
+  Check,
+  X,
+  Archive,
+  ArchiveRestore,
+  CalendarDays,
+  MapPin,
+} from 'lucide-react'
+import { updateEvent, deleteEvent } from '@/app/actions/events'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,6 +26,7 @@ import {
 import { RundownCard } from './RundownCard'
 import { CreateRundownDialog } from './CreateRundownDialog'
 import { toast } from 'sonner'
+import { cn } from '@/lib/utils'
 import type { Event, Rundown } from '@/lib/supabase/types'
 
 interface EventCardProps {
@@ -22,11 +35,20 @@ interface EventCardProps {
   allEvents: Event[]
 }
 
+const MENU_ITEM =
+  'gap-2.5 px-3.5 py-2.5 font-cond text-[11px] font-bold uppercase tracking-[0.1em] text-[#c8c9d0] focus:bg-[#16161c] focus:text-[#eef0f3] cursor-pointer'
+
 export function EventCard({ event, rundowns, allEvents }: EventCardProps) {
   const [expanded, setExpanded] = useState(true)
   const [renaming, setRenaming] = useState(false)
   const [name, setName] = useState(event.name)
   const [saving, setSaving] = useState(false)
+
+  const formattedDate = event.event_date
+    ? new Date(event.event_date + 'T00:00:00').toLocaleDateString('en-US', {
+        weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
+      })
+    : null
 
   async function saveRename() {
     if (!name.trim() || name === event.name) {
@@ -35,13 +57,19 @@ export function EventCard({ event, rundowns, allEvents }: EventCardProps) {
       return
     }
     setSaving(true)
-    const result = await renameEvent(event.id, name)
+    const result = await updateEvent(event.id, { name: name.trim() })
     setSaving(false)
     if (result.error) {
       toast.error(result.error)
       setName(event.name)
     }
     setRenaming(false)
+  }
+
+  async function handleArchive() {
+    const result = await updateEvent(event.id, { archived: !event.archived })
+    if (result.error) toast.error(result.error)
+    else toast.success(event.archived ? 'Event restored' : 'Event archived')
   }
 
   async function handleDelete() {
@@ -51,20 +79,15 @@ export function EventCard({ event, rundowns, allEvents }: EventCardProps) {
   }
 
   return (
-    <div className="rounded-lg border border-zinc-800 overflow-hidden">
+    <div className={cn('border bg-[#0c0c11] overflow-hidden', event.archived ? 'border-[#1d1d24]/60 opacity-70' : 'border-[#1d1d24]')}>
       {/* Event header */}
-      <div className="group flex items-center gap-2 px-3 py-2.5 bg-zinc-900/50 hover:bg-zinc-900 transition-colors">
+      <div className="group flex items-center gap-4 px-[22px] py-[18px] border-b border-[#1d1d24]">
         <button
           onClick={() => setExpanded(!expanded)}
-          className="text-zinc-500 hover:text-zinc-300 transition-colors shrink-0"
+          className="text-[#5a5c66] hover:text-[#9ba0ab] transition-colors shrink-0"
         >
-          {expanded
-            ? <ChevronDown className="w-4 h-4" />
-            : <ChevronRight className="w-4 h-4" />
-          }
+          {expanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
         </button>
-
-        <Folder className="w-4 h-4 text-zinc-500 shrink-0" />
 
         {renaming ? (
           <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -76,54 +99,68 @@ export function EventCard({ event, rundowns, allEvents }: EventCardProps) {
                 if (e.key === 'Enter') saveRename()
                 if (e.key === 'Escape') { setRenaming(false); setName(event.name) }
               }}
-              className="flex-1 bg-zinc-800 border border-zinc-600 rounded px-2 py-0.5 text-sm text-white outline-none focus:ring-1 focus:ring-zinc-500"
+              className="flex-1 bg-[#16161c] border border-[#3a3a48] px-2 py-1 text-[15px] text-[#eef0f3] outline-none"
             />
-            <button onClick={saveRename} disabled={saving} className="text-zinc-400 hover:text-white">
-              <Check className="w-3.5 h-3.5" />
-            </button>
-            <button onClick={() => { setRenaming(false); setName(event.name) }} className="text-zinc-400 hover:text-white">
-              <X className="w-3.5 h-3.5" />
-            </button>
+            <button onClick={saveRename} disabled={saving} className="text-[#9ba0ab] hover:text-[#eef0f3]"><Check className="w-3.5 h-3.5" /></button>
+            <button onClick={() => { setRenaming(false); setName(event.name) }} className="text-[#9ba0ab] hover:text-[#eef0f3]"><X className="w-3.5 h-3.5" /></button>
           </div>
         ) : (
-          <button
-            onClick={() => setExpanded(!expanded)}
-            className="flex-1 text-left text-sm font-medium text-white truncate"
-          >
-            {event.name}
-          </button>
+          <div className="flex-1 min-w-0 cursor-pointer" onClick={() => setExpanded(!expanded)}>
+            <h3 className="text-[17px] font-semibold text-[#eef0f3] tracking-[-0.01em] truncate">{event.name}</h3>
+            {(formattedDate || event.location) && (
+              <div className="flex items-center gap-3.5 mt-1.5 text-[12.5px] text-[#9ba0ab]">
+                {formattedDate && (
+                  <span className="inline-flex items-center gap-1.5">
+                    <CalendarDays className="w-3 h-3 text-[#888b96]" />
+                    <span className="font-mono">{formattedDate}</span>
+                  </span>
+                )}
+                {formattedDate && event.location && <span className="text-[#3a3a48]">·</span>}
+                {event.location && (
+                  <span className="inline-flex items-center gap-1.5 min-w-0">
+                    <MapPin className="w-3 h-3 text-[#888b96] shrink-0" />
+                    <span className="truncate">{event.location}</span>
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
         )}
 
-        <span className="text-xs text-zinc-600 shrink-0">{rundowns.length}</span>
+        <span className="font-cond text-[11px] font-bold uppercase tracking-[0.1em] text-[#888b96] shrink-0">
+          {rundowns.length} rundown{rundowns.length === 1 ? '' : 's'}
+        </span>
 
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
           <CreateRundownDialog
             events={allEvents}
             defaultEventId={event.id}
             trigger={
-              <Button variant="ghost" size="icon" className="w-6 h-6 text-zinc-400 hover:text-white hover:bg-zinc-800">
+              <button className="w-7 h-7 flex items-center justify-center text-[#9ba0ab] hover:text-[#eef0f3] hover:bg-[#16161c] transition-colors">
                 <Plus className="w-3.5 h-3.5" />
-              </Button>
+              </button>
             }
           />
 
           <DropdownMenu>
             <DropdownMenuTrigger
-              render={<Button variant="ghost" size="icon" className="w-6 h-6 text-zinc-400 hover:text-white hover:bg-zinc-800" />}
+              render={<button className="w-7 h-7 flex items-center justify-center text-[#9ba0ab] hover:text-[#eef0f3] hover:bg-[#16161c] transition-colors" />}
             >
               <MoreHorizontal className="w-4 h-4" />
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="bg-zinc-900 border-zinc-700 text-zinc-200 w-40">
-              <DropdownMenuItem
-                onClick={() => setRenaming(true)}
-                className="gap-2 focus:bg-zinc-800 focus:text-white cursor-pointer"
-              >
-                <Pencil className="w-3.5 h-3.5" /> Rename
+            <DropdownMenuContent align="end" className="bg-[#111116] border-[#2e2e38] text-[#c8c9d0] w-44 p-0">
+              <DropdownMenuItem onClick={() => setRenaming(true)} className={MENU_ITEM}>
+                <Pencil className="w-3.5 h-3.5 text-[#9ba0ab]" /> Rename
               </DropdownMenuItem>
-              <DropdownMenuSeparator className="bg-zinc-800" />
+              <DropdownMenuItem onClick={handleArchive} className={MENU_ITEM}>
+                {event.archived
+                  ? <><ArchiveRestore className="w-3.5 h-3.5 text-[#9ba0ab]" /> Restore from archive</>
+                  : <><Archive className="w-3.5 h-3.5 text-[#9ba0ab]" /> Archive</>}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator className="bg-[#1d1d24]" />
               <DropdownMenuItem
                 onClick={handleDelete}
-                className="gap-2 text-red-400 focus:bg-zinc-800 focus:text-red-400 cursor-pointer"
+                className="gap-2.5 px-3.5 py-2.5 font-cond text-[11px] font-bold uppercase tracking-[0.1em] text-[#ff5a73] focus:bg-[rgba(255,40,72,0.08)] focus:text-[#ff5a73] cursor-pointer"
               >
                 <Trash2 className="w-3.5 h-3.5" /> Delete
               </DropdownMenuItem>
@@ -134,26 +171,24 @@ export function EventCard({ event, rundowns, allEvents }: EventCardProps) {
 
       {/* Rundowns inside event */}
       {expanded && (
-        <div className="p-2 space-y-1 bg-zinc-950/30">
+        <>
           {rundowns.length === 0 ? (
-            <div className="py-4 text-center">
-              <p className="text-xs text-zinc-600">No rundowns yet</p>
-              <CreateRundownDialog
-                events={allEvents}
-                defaultEventId={event.id}
-                trigger={
-                  <button className="text-xs text-zinc-500 hover:text-zinc-300 mt-1 transition-colors">
-                    + Add rundown
-                  </button>
-                }
-              />
-            </div>
+            <div className="px-[22px] py-5 text-[13px] text-[#888b96] italic">No rundowns yet.</div>
           ) : (
             rundowns.map((rundown) => (
               <RundownCard key={rundown.id} rundown={rundown} allEvents={allEvents} />
             ))
           )}
-        </div>
+          <CreateRundownDialog
+            events={allEvents}
+            defaultEventId={event.id}
+            trigger={
+              <button className="flex items-center gap-2 w-full px-[22px] py-3 border-t border-[#1d1d24] font-cond text-[10px] font-bold uppercase tracking-[0.14em] text-[#888b96] hover:text-[#f0a838] transition-colors">
+                <Plus className="w-3 h-3" /> New rundown
+              </button>
+            }
+          />
+        </>
       )}
     </div>
   )

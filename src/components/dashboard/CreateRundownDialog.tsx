@@ -3,15 +3,12 @@
 import { useState, useRef } from 'react'
 import { Plus } from 'lucide-react'
 import { createRundown } from '@/app/actions/rundowns'
-import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import type { Event, Rundown } from '@/lib/supabase/types'
 
 interface CreateRundownDialogProps {
@@ -21,6 +18,10 @@ interface CreateRundownDialogProps {
   isTemplate?: boolean
   trigger?: React.ReactNode
 }
+
+const FIELD =
+  'w-full bg-[#16161c] border border-[#2e2e38] px-2.5 py-2 text-sm text-[#eef0f3] placeholder:text-[#5a5c66] outline-none focus:border-[#3a3a48]'
+const FIELD_LABEL = 'block font-cond text-[10px] font-bold uppercase tracking-[0.12em] text-[#9ba0ab] mb-1.5'
 
 export function CreateRundownDialog({
   events,
@@ -48,10 +49,10 @@ export function CreateRundownDialog({
   }
 
   const defaultTrigger = (
-    <Button size="sm" className="gap-1.5 bg-white text-zinc-900 hover:bg-zinc-100">
+    <button className="inline-flex items-center gap-2 h-9 px-4 font-cond text-[11px] font-bold uppercase tracking-[0.14em] bg-[#111116] text-[#c8c9d0] border border-[#22222a] hover:border-[#3a3a48] hover:bg-[#16161c] cursor-pointer transition-colors">
       <Plus className="w-4 h-4" />
       New {isTemplate ? 'template' : 'rundown'}
-    </Button>
+    </button>
   )
 
   return (
@@ -61,58 +62,48 @@ export function CreateRundownDialog({
       </span>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="bg-zinc-900 border-zinc-800 text-white sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Create {isTemplate ? 'template' : 'rundown'}</DialogTitle>
+        <DialogContent className="bg-[#111116] border-[#2e2e38] text-white sm:max-w-md p-0 gap-0 border-t-2 border-t-[#f0a838]">
+          <DialogHeader className="px-5 py-4 border-b border-[#1d1d24]">
+            <DialogTitle className="text-base font-semibold text-[#eef0f3]">
+              Create {isTemplate ? 'template' : 'rundown'}
+            </DialogTitle>
           </DialogHeader>
-          <form ref={formRef} action={handleSubmit} className="space-y-4 mt-2">
+          <form ref={formRef} action={handleSubmit} className="p-5 space-y-4">
             <input type="hidden" name="is_template" value={String(isTemplate)} />
-            {defaultEventId && (
-              <input type="hidden" name="event_id" value={defaultEventId} />
-            )}
+            {defaultEventId && <input type="hidden" name="event_id" value={defaultEventId} />}
 
-            <div className="space-y-1.5">
-              <Label htmlFor="rundown-name" className="text-zinc-300 text-sm">Name</Label>
-              <Input
+            <div>
+              <label htmlFor="rundown-name" className={FIELD_LABEL}>Name</label>
+              <input
                 id="rundown-name"
                 name="name"
                 required
                 autoFocus
                 placeholder={isTemplate ? 'Weekly Broadcast Template' : 'Morning Show Rundown'}
-                className="bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-600 focus-visible:ring-zinc-600"
+                className={FIELD}
               />
             </div>
 
             {!isTemplate && templates.length > 0 && (
-              <div className="space-y-1.5">
-                <Label htmlFor="template-select" className="text-zinc-300 text-sm">
-                  Start from <span className="text-zinc-500">(optional)</span>
-                </Label>
-                <select
-                  id="template-select"
-                  name="template_id"
-                  className="w-full rounded-md bg-zinc-800 border border-zinc-700 text-white text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-zinc-600"
-                >
+              <div>
+                <label htmlFor="template-select" className={FIELD_LABEL}>
+                  Start from <span className="text-[#5a5c66] normal-case tracking-normal">(optional)</span>
+                </label>
+                <select id="template-select" name="template_id" className={FIELD}>
                   <option value="">Blank rundown</option>
                   {templates.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
+                    <option key={t.id} value={t.id}>{t.name}</option>
                   ))}
                 </select>
               </div>
             )}
 
             {!defaultEventId && events.length > 0 && (
-              <div className="space-y-1.5">
-                <Label htmlFor="event-select" className="text-zinc-300 text-sm">
-                  Add to event <span className="text-zinc-500">(optional)</span>
-                </Label>
-                <select
-                  id="event-select"
-                  name="event_id"
-                  className="w-full rounded-md bg-zinc-800 border border-zinc-700 text-white text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-zinc-600"
-                >
+              <div>
+                <label htmlFor="event-select" className={FIELD_LABEL}>
+                  Add to event <span className="text-[#5a5c66] normal-case tracking-normal">(optional)</span>
+                </label>
+                <select id="event-select" name="event_id" className={FIELD}>
                   <option value="">No event</option>
                   {events.map((e) => (
                     <option key={e.id} value={e.id}>{e.name}</option>
@@ -121,26 +112,23 @@ export function CreateRundownDialog({
               </div>
             )}
 
-            {error && (
-              <p className="text-sm text-red-400">{error}</p>
-            )}
+            {error && <p className="text-sm text-[#ff5a73]">{error}</p>}
 
             <div className="flex justify-end gap-2 pt-1">
-              <Button
+              <button
                 type="button"
-                variant="ghost"
                 onClick={() => setOpen(false)}
-                className="text-zinc-400 hover:text-white"
+                className="inline-flex items-center px-4 py-2 font-cond text-[11px] font-bold uppercase tracking-[0.1em] bg-transparent text-[#9ba0ab] border border-[#2e2e38] hover:text-[#eef0f3] cursor-pointer"
               >
                 Cancel
-              </Button>
-              <Button
+              </button>
+              <button
                 type="submit"
                 disabled={loading}
-                className="bg-white text-zinc-900 hover:bg-zinc-100"
+                className="inline-flex items-center px-4 py-2 font-cond text-[11px] font-bold uppercase tracking-[0.1em] bg-[#f0a838] text-[#06060a] border border-[#f0a838] hover:bg-[#ffba50] cursor-pointer disabled:opacity-50"
               >
                 {loading ? 'Creating…' : 'Create'}
-              </Button>
+              </button>
             </div>
           </form>
         </DialogContent>

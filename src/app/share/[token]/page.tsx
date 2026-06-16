@@ -11,14 +11,27 @@ export default async function SharePage({
   const supabase = await createClient()
 
   // Public, token-gated read via the security-definer function (bypasses RLS).
-  // rpc isn't in the generated types, so call it loosely-typed.
-  const { data } = await (
-    supabase.rpc as unknown as (
-      fn: string,
-      args: Record<string, unknown>
-    ) => Promise<{ data: unknown; error: unknown }>
-  )('get_shared_rundown', { p_token: token })
+  // rpc isn't in the generated types, so cast each call site (keeps `this` bound).
+  type RpcResult = Promise<{ data: unknown; error: unknown }>
+
+  const { data } = await (supabase.rpc as unknown as (fn: string, args: Record<string, unknown>) => RpcResult)(
+    'get_shared_rundown', { p_token: token }
+  )
   if (!data) notFound()
 
-  return <SharedRundownView data={data as unknown as SharedData} />
+  const { data: notesRaw } = await (supabase.rpc as unknown as (fn: string, args: Record<string, unknown>) => RpcResult)(
+    'get_share_private_notes', { p_token: token }
+  )
+  const notesArr = (notesRaw as { cue_id: string; content: string }[] | null) ?? []
+  const initialPrivateNotes: Record<string, string> = Object.fromEntries(
+    notesArr.map((n) => [n.cue_id, n.content])
+  )
+
+  return (
+    <SharedRundownView
+      data={data as unknown as SharedData}
+      token={token}
+      initialPrivateNotes={initialPrivateNotes}
+    />
+  )
 }

@@ -57,7 +57,7 @@ export function PrivateNoteCell({
           if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); save() }
         }}
         rows={1}
-        className="w-full min-h-[28px] resize-none bg-amber-950/30 border border-amber-700/40 rounded px-2 py-1 text-sm text-amber-100 outline-none focus:ring-1 focus:ring-amber-600/50"
+        className="w-full min-h-[28px] resize-none bg-[#0a0a0d] border border-[#f0a838] px-2 py-1 text-[13px] text-[#eef0f3] outline-none"
       />
     )
   }
@@ -66,9 +66,10 @@ export function PrivateNoteCell({
     <div
       data-testid="private-note-cell"
       onClick={() => setEditing(true)}
-      className="w-full min-h-[28px] px-2 py-1 text-sm text-amber-200/80 cursor-text hover:bg-amber-950/20 rounded whitespace-pre-wrap break-words"
+      className="w-full min-h-[28px] px-2 py-1 text-[13px] cursor-text whitespace-pre-wrap break-words [overflow-wrap:anywhere] leading-[1.4]"
+      style={{ color: value ? '#c8c9d0' : '#5a5c66', fontStyle: value ? 'normal' : 'italic' }}
     >
-      {value || <span className="text-zinc-700 italic">—</span>}
+      {value || 'Private note…'}
     </div>
   )
 }

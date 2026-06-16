@@ -55,6 +55,7 @@ import type { SearchCue } from './RundownSearch'
 import { RundownDataProvider } from './RundownDataContext'
 import type { RundownSettings } from './RundownDataContext'
 import { buildCueLayout, formatCueNumber } from './cueTree'
+import { CF, totalRowWidth } from './layout'
 import { useLiveShow } from './useLiveShow'
 import { useBroadcastLive } from './liveSync'
 import {
@@ -710,12 +711,13 @@ export function RundownEditor({
   }
 
   const isEmpty = cues.length === 0
+  const rowWidth = totalRowWidth(titleWidth, visibleColumns.map((c) => c.width))
 
   return (
     <RundownDataProvider
       value={{ rundownId: rundown.id, mentions, variables, setMentions, setVariables, rundownSettings, onSaveSettings: handleSaveSettings }}
     >
-      <div className="flex flex-col h-full bg-zinc-950 overflow-hidden">
+      <div className="flex flex-col h-full bg-[#09090d] overflow-hidden">
         <RundownHeader
           rundown={rundown}
           columns={columns}
@@ -750,6 +752,8 @@ export function RundownEditor({
           }}
         />
 
+        {live.isLive && <TransportBar live={live} cues={liveCues} />}
+
         <div className="flex-1 overflow-hidden flex flex-col">
           {selectedIds.size > 0 && (
             <BatchToolbar
@@ -766,9 +770,20 @@ export function RundownEditor({
             />
           )}
 
-          {/* Single scroll container — header is sticky so it always aligns with rows */}
-          <div className="flex-1 overflow-auto min-h-0">
-          <div className="sticky top-0 z-10">
+          {/* Single scroll container — header is sticky so it always aligns with rows,
+              and min-width:max-content keeps horizontal scroll synced */}
+          <div
+            data-cue-scroll="1"
+            className="flex-1 overflow-auto min-h-0 bg-[#09090d]"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setSelectedIds(new Set())
+            }}
+          >
+          <div style={{ minWidth: 'max-content' }}>
+          <div
+            className="sticky top-0 z-30 bg-[#0b0b10] border-b border-[#22222a]"
+            style={{ height: CF.headerH }}
+          >
           <ColumnHeaders
             columns={columns}
             visibleColumns={visibleColumns}
@@ -785,6 +800,7 @@ export function RundownEditor({
           </div>
 
           <div
+            className="py-1.5"
             onClick={(e) => {
               if (e.target === e.currentTarget) setSelectedIds(new Set())
             }}
@@ -809,6 +825,8 @@ export function RundownEditor({
                           aggregate={groupAggregate(item.children)}
                           collapsed={collapsed}
                           selected={selectedIds.has(item.heading.id)}
+                          rowWidth={rowWidth}
+                          timeFormat={rundownSettings.time_display}
                           onToggleCollapse={() => toggleCollapse(item.heading.id)}
                           onSelect={handleSelect}
                           onUpdate={handleUpdateCue}
@@ -833,24 +851,24 @@ export function RundownEditor({
             </DndContext>
 
             {/* Add cue / heading buttons */}
-            <div className={cn('px-7 py-2', isEmpty && 'py-12 flex justify-center')}>
+            <div className={cn(isEmpty ? 'py-16 flex justify-center' : 'pt-2.5 pb-4 pl-10')}>
               {isEmpty ? (
                 <div className="text-center">
-                  <p className="text-zinc-600 text-sm mb-3">No cues yet</p>
+                  <p className="text-[#5a5c66] text-sm mb-3">No cues yet</p>
                   <div className="flex items-center gap-2 justify-center">
                     <button
                       onClick={handleAddCue}
-                      className="inline-flex items-center gap-1.5 text-sm text-zinc-500 hover:text-white border border-dashed border-zinc-700 hover:border-zinc-500 rounded-lg px-4 py-2 transition-colors"
+                      className="inline-flex items-center gap-2 h-[34px] px-4 font-cond text-[10px] font-bold uppercase tracking-[0.14em] text-[#888b96] hover:text-[#c8c9d0] border border-dashed border-[#2e2e38] hover:border-[#3a3a48] transition-colors"
                     >
-                      <Plus className="w-4 h-4" />
+                      <Plus className="w-3.5 h-3.5" />
                       Add first cue
                     </button>
                     <button
                       onClick={handleAddHeading}
                       data-testid="add-heading-empty-btn"
-                      className="inline-flex items-center gap-1.5 text-sm text-zinc-500 hover:text-white border border-dashed border-zinc-700 hover:border-zinc-500 rounded-lg px-4 py-2 transition-colors"
+                      className="inline-flex items-center gap-2 h-[34px] px-4 font-cond text-[10px] font-bold uppercase tracking-[0.14em] text-[#888b96] hover:text-[#c8c9d0] border border-dashed border-[#2e2e38] hover:border-[#3a3a48] transition-colors"
                     >
-                      <HeadingIcon className="w-4 h-4" />
+                      <HeadingIcon className="w-3.5 h-3.5" />
                       Add heading
                     </button>
                   </div>
@@ -861,45 +879,49 @@ export function RundownEditor({
                     render={
                       <button
                         data-testid="add-cue-dropdown-trigger"
-                        className="flex items-center gap-1 text-xs text-zinc-600 hover:text-zinc-400 transition-colors py-1"
+                        className="inline-flex items-center gap-2 h-[34px] px-4 font-cond text-[10px] font-bold uppercase tracking-[0.14em] bg-transparent text-[#888b96] hover:text-[#c8c9d0] border border-dashed border-[#2e2e38] hover:border-[#3a3a48] transition-colors"
                       />
                     }
                   >
                     <Plus className="w-3.5 h-3.5" />
                     Add
-                    <ChevronDown className="w-3 h-3 ml-0.5" />
+                    <ChevronDown className="w-3 h-3" />
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" className="bg-zinc-900 border-zinc-700 text-zinc-200 w-40">
+                  <DropdownMenuContent align="start" className="bg-[#111116] border-[#2e2e38] text-[#c8c9d0] w-44 p-0">
                     <DropdownMenuItem
                       onClick={handleAddCue}
                       data-testid="add-cue-menu-item"
-                      className="gap-2 text-xs focus:bg-zinc-800 cursor-pointer"
+                      className="gap-2.5 px-3.5 py-2.5 font-cond text-[11px] font-bold uppercase tracking-[0.1em] focus:bg-[#16161c] focus:text-[#eef0f3] cursor-pointer"
                     >
-                      <Plus className="w-3.5 h-3.5" /> Add cue
+                      <Plus className="w-3.5 h-3.5 text-[#9ba0ab]" /> Add cue
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       onClick={handleAddHeading}
                       data-testid="add-heading-menu-item"
-                      className="gap-2 text-xs focus:bg-zinc-800 cursor-pointer"
+                      className="gap-2.5 px-3.5 py-2.5 font-cond text-[11px] font-bold uppercase tracking-[0.1em] focus:bg-[#16161c] focus:text-[#eef0f3] cursor-pointer border-t border-[#1d1d24]"
                     >
-                      <HeadingIcon className="w-3.5 h-3.5" /> Add heading
+                      <HeadingIcon className="w-3.5 h-3.5 text-[#9ba0ab]" /> Add heading
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               )}
             </div>
-          </div>
+
+            {/* Live spacer — lets even the last cue pin to the top */}
+            {live.isLive && <div style={{ height: '72vh' }} aria-hidden />}
+          </div>{/* end rows wrapper */}
+          </div>{/* end min-width wrapper */}
           </div>{/* end single scroll container */}
         </div>
 
         {/* Footer summary */}
-        <div className="shrink-0 border-t border-zinc-800 bg-zinc-950 px-6 py-2 flex items-center gap-6 text-xs">
-          <div className="flex items-center gap-1.5">
-            <span className="text-zinc-500 uppercase tracking-wider text-[10px]">End of rundown</span>
+        <div className="shrink-0 border-t border-[#22222a] bg-[#0b0b10] px-[22px] h-[38px] flex items-center gap-6 text-xs">
+          <div className="flex items-center gap-2">
+            <span className="font-cond text-[9px] font-bold uppercase tracking-[0.14em] text-[#888b96]">End of rundown</span>
             <span
               className={cn(
                 'font-mono tabular-nums',
-                live.isLive ? 'text-zinc-600 line-through' : 'text-zinc-300'
+                live.isLive ? 'text-[#5a5c66] line-through' : 'text-[#c8c9d0]'
               )}
             >
               {formatMsToTimeDisplay(plannedEndMs, rundownSettings.time_display)}
@@ -907,23 +929,20 @@ export function RundownEditor({
           </div>
           {live.isLive && (
             <>
-              <div className="flex items-center gap-1.5">
-                <span className="text-zinc-500 uppercase tracking-wider text-[10px]">Calculated end</span>
-                <span className="font-mono tabular-nums text-white">
+              <div className="flex items-center gap-2">
+                <span className="font-cond text-[9px] font-bold uppercase tracking-[0.14em] text-[#888b96]">Calculated end</span>
+                <span className="font-mono tabular-nums text-[#eef0f3]">
                   {formatMsToTimeDisplay(plannedEndMs + live.overUnderMs, rundownSettings.time_display)}
                 </span>
               </div>
-              <div className="flex items-center gap-1.5">
-                <span className="text-zinc-500 uppercase tracking-wider text-[10px]">Over / Under</span>
+              <div className="flex items-center gap-2">
+                <span className="font-cond text-[9px] font-bold uppercase tracking-[0.14em] text-[#888b96]">Over / Under</span>
                 <span
-                  className={cn(
-                    'font-mono tabular-nums',
-                    Math.abs(live.overUnderMs) < 1000
-                      ? 'text-zinc-400'
-                      : live.overUnderMs > 0
-                        ? 'text-red-400'
-                        : 'text-emerald-400'
-                  )}
+                  className="font-mono tabular-nums"
+                  style={{
+                    color:
+                      Math.abs(live.overUnderMs) < 1000 ? '#9ba0ab' : live.overUnderMs > 0 ? '#ff5a73' : '#18d986',
+                  }}
                 >
                   {Math.abs(live.overUnderMs) < 1000
                     ? 'on time'
@@ -932,12 +951,10 @@ export function RundownEditor({
               </div>
             </>
           )}
-          <div className="ml-auto text-zinc-500">
+          <div className="ml-auto font-mono text-[#888b96]">
             {realCueCount} {realCueCount === 1 ? 'cue' : 'cues'} · {formatDuration(totalDurationMs)} total
           </div>
         </div>
-
-        {live.isLive && <TransportBar live={live} cues={liveCues} />}
 
         <RundownSettingsDialog
           open={settingsOpen}

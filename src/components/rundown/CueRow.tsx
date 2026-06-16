@@ -2,18 +2,17 @@
 
 import { useState, useRef, useEffect } from 'react'
 import {
-  GripVertical,
   Settings,
   Check,
   Trash2,
   Clock,
   AlarmClock,
-  Palette,
   Pin,
   ChevronDown,
   Heading as HeadingIcon,
   Copy,
   Plus,
+  GripVertical,
 } from 'lucide-react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -28,18 +27,18 @@ import {
 import { RichTextCell } from './RichTextCell'
 import { DropdownCell } from './DropdownCell'
 import { PrivateNoteCell } from './PrivateNoteCell'
-import { PRIVATE_NOTES_WIDTH, TITLE_COL_WIDTH, PRIVATE_NOTES_ID } from './layout'
+import {
+  CF,
+  CUE_COLORS,
+  textOn,
+  PRIVATE_NOTES_WIDTH,
+  TITLE_COL_WIDTH,
+  PRIVATE_NOTES_ID,
+} from './layout'
 import { formatDuration, parseDurationInput, formatMsToTime, formatMsToTimeDisplay, parseTimeToMs } from '@/lib/timing'
-import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import type { Cue, Column } from '@/lib/supabase/types'
 import type { CueTimingOutput, TimeDisplay } from '@/lib/timing'
-
-const CUE_COLORS = [
-  null,
-  '#1e293b', '#7f1d1d', '#78350f', '#14532d',
-  '#1e3a5f', '#4a1d96', '#831843', '#064e3b',
-]
 
 type SelectMods = { shift: boolean; meta: boolean }
 
@@ -75,6 +74,9 @@ interface CueRowProps {
   timeFormat?: TimeDisplay
   titleWidth?: number
 }
+
+const LABEL_FONT =
+  'font-cond text-[9px] font-bold uppercase tracking-[0.18em]'
 
 export function CueRow({
   cue,
@@ -133,7 +135,7 @@ export function CueRow({
         const pct = Math.min(100, (elapsed / cue.duration_ms) * 100)
         progressBarRef.current.style.width = `${pct}%`
         progressBarRef.current.style.backgroundColor =
-          elapsed > cue.duration_ms ? 'rgb(239 68 68)' : 'rgb(34 197 94)'
+          elapsed > cue.duration_ms ? '#ff2848' : '#f0a838'
       }
       rafId = requestAnimationFrame(frame)
     }
@@ -145,30 +147,33 @@ export function CueRow({
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.5 : 1,
+    marginBottom: CF.gap,
   }
 
-  // During live mode, pin the active cue to the top (list scrolls up under it)
+  // During live mode, pin the active cue to the top — offset by the sticky
+  // column header so the active cue isn't hidden behind it.
   useEffect(() => {
-    if (isActive) {
+    if (!isActive) return
+    const cont = document.querySelector('[data-cue-scroll]') as HTMLElement | null
+    const row = rowRef.current
+    if (!cont || !row) {
       rowRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+      return
     }
+    const cr = cont.getBoundingClientRect()
+    const rr = row.getBoundingClientRect()
+    cont.scrollTo({ top: cont.scrollTop + (rr.top - cr.top) - (CF.headerH + 8), behavior: 'smooth' })
   }, [isActive])
 
-  useEffect(() => {
-    setTitleInput(cue.title)
-  }, [cue.title])
+  useEffect(() => { setTitleInput(cue.title) }, [cue.title])
+  useEffect(() => { setSubtitleInput(cue.subtitle ?? '') }, [cue.subtitle])
 
-  useEffect(() => {
-    setSubtitleInput(cue.subtitle ?? '')
-  }, [cue.subtitle])
-
-  // --- Duration editing ---
+  // --- Editing handlers (unchanged logic) ---
   function startDurationEdit() {
     setDurationInput(formatDuration(cue.duration_ms))
     setEditingDuration(true)
     setTimeout(() => durationRef.current?.select(), 0)
   }
-
   async function saveDuration() {
     setEditingDuration(false)
     const ms = parseDurationInput(durationInput)
@@ -176,8 +181,6 @@ export function CueRow({
     onUpdate(cue.id, { duration_ms: ms })
     await updateCue(cue.id, rundownId, { duration_ms: ms })
   }
-
-  // --- Title editing ---
   async function saveTitle() {
     setEditingTitle(false)
     const t = titleInput.trim()
@@ -185,8 +188,6 @@ export function CueRow({
     onUpdate(cue.id, { title: t })
     await updateCue(cue.id, rundownId, { title: t })
   }
-
-  // --- Subtitle editing ---
   async function saveSubtitle() {
     setEditingSubtitle(false)
     const s = subtitleInput.trim()
@@ -194,27 +195,17 @@ export function CueRow({
     onUpdate(cue.id, { subtitle: s || null })
     await updateCue(cue.id, rundownId, { subtitle: s || null })
   }
-
-  // --- Delete (server call lives in RundownEditor.handleDeleteCue for undo support) ---
-  function handleDelete() {
-    onDelete(cue.id)
-  }
-
-  // --- Start type toggle ---
+  function handleDelete() { onDelete(cue.id) }
   async function toggleStartType() {
     const newType = cue.start_type === 'soft' ? 'hard' : 'soft'
     const override = newType === 'hard' ? formatMsToTime(cue.calculated_start_ms) : null
     onUpdate(cue.id, { start_type: newType, start_time_override: override })
     await updateCue(cue.id, rundownId, { start_type: newType, start_time_override: override })
   }
-
-  // --- Color ---
   async function setColor(color: string | null) {
     onUpdate(cue.id, { background_color: color })
     await updateCue(cue.id, rundownId, { background_color: color })
   }
-
-  // --- Hard-start time editing ---
   function startStartEdit() {
     setStartInput(formatMsToTime(cue.calculated_start_ms))
     setEditingStart(true)
@@ -231,13 +222,24 @@ export function CueRow({
   const startTimeLabel = formatMsToTimeDisplay(cue.calculated_start_ms, timeFormat)
   const isHard = cue.start_type === 'hard'
   const hasGap = isHard && cue.gap_ms > 0
-  const hasOverlap = isHard && cue.gap_ms < 0
-  // For a hard cue, the natural (cascade) start it would have if soft = current − gap
-  const naturalStartLabel = formatMsToTimeDisplay(cue.calculated_start_ms - cue.gap_ms, timeFormat)
-  const showStruck = isHard && cue.gap_ms !== 0
-
-  // Live overtime flag for the active cue
   const liveOvertime = liveRemainingMs != null && liveRemainingMs < 0
+
+  // ── Block-model colours ──
+  const ct = textOn(cue.background_color)
+  const baseCellBg = cue.background_color || '#16161c'
+  const numColor = isActive ? '#fff' : isNext ? '#eef0f3' : selected ? '#06060a' : (cue.background_color ? ct.num : '#9ba0ab')
+  const remColor = liveRemainingMs == null ? '#eef0f3' : liveRemainingMs < 0 ? '#ff2848' : liveRemainingMs <= 30000 ? '#f0a838' : '#18d986'
+
+  // shared tile base (block model)
+  function tile(width: number, extra?: React.CSSProperties): React.CSSProperties {
+    // content is top-aligned within the row
+    return { width, minHeight: CF.minRowH, flexShrink: 0, background: baseCellBg, display: 'flex', alignItems: 'flex-start', padding: '12px 14px', ...extra }
+  }
+
+  const labelIndent = CF.rowPad + CF.c1 + CF.gap // 66
+
+  // CueFlow cue-menu item class
+  const MI = 'gap-2.5 px-3.5 py-2.5 font-cond text-[11px] font-bold uppercase tracking-[0.1em] text-[#c8c9d0] focus:bg-[#16161c] focus:text-[#eef0f3] cursor-pointer'
 
   return (
     <div
@@ -247,203 +249,153 @@ export function CueRow({
       }}
       style={style}
       data-cue-id={cue.id}
+      onClick={(e) => e.stopPropagation()}
     >
       {/* CURRENT / NEXT cue label (live mode) */}
       {live && (isActive || isNext) && (
         <div
-          className={cn(
-            'flex items-center gap-2 px-10 pt-1.5 pb-0.5 text-[10px] font-semibold uppercase tracking-wider',
-            isActive ? 'text-red-500' : 'text-zinc-500'
-          )}
+          className={cn('flex items-center gap-2 pt-0.5 pb-1', LABEL_FONT)}
+          style={{ paddingLeft: labelIndent, color: isActive ? '#ff5a73' : '#7c7e8a' }}
         >
           {isActive ? 'Current cue' : 'Next cue'}
-          <div
-            className={cn(
-              'h-px flex-1',
-              isActive ? 'bg-red-500/40' : 'bg-zinc-700'
-            )}
-          />
+          <div className="h-px flex-1" style={{ background: isActive ? 'rgba(255,40,72,0.5)' : '#22222a' }} />
         </div>
       )}
 
-      {/* Gap/overlap indicator */}
-      {isHard && cue.gap_ms !== 0 && (
+      {/* Gap / overlap indicator (white gap, red overlap) — text on the LEFT */}
+      {isHard && cue.gap_ms !== 0 && !isActive && (
         <div
-          className={cn(
-            'flex items-center text-xs px-14 py-0.5',
-            hasGap ? 'text-emerald-600' : 'text-red-500'
-          )}
+          className="flex items-center gap-2 pb-1 font-mono text-[11px]"
+          style={{ paddingLeft: labelIndent, color: hasGap ? '#eef0f3' : '#ff5a73' }}
         >
-          <div className={cn('h-px flex-1 mr-2', hasGap ? 'bg-emerald-900' : 'bg-red-900')} />
           <span>{hasGap ? `+${formatDuration(cue.gap_ms)} gap` : `${formatDuration(-cue.gap_ms)} overlap`}</span>
-          <div className={cn('h-px flex-1 ml-2', hasGap ? 'bg-emerald-900' : 'bg-red-900')} />
+          <div className="h-px flex-1" style={{ background: hasGap ? 'rgba(238,240,243,0.18)' : 'rgba(255,40,72,0.25)' }} />
         </div>
       )}
 
+      {/* Row — block model */}
       <div
-        className={cn(
-          'group relative flex items-stretch min-h-[40px] border-b border-zinc-800/60 transition-colors',
-          isActive
-            ? liveOvertime
-              ? 'bg-red-950/50'
-              : 'bg-emerald-950/40'
-            : selected
-              ? 'bg-zinc-800/60'
-              : 'hover:bg-zinc-900/40',
-          depth > 0 && 'border-l-2 border-zinc-700/70 bg-zinc-900/20',
-          isNext && 'next-cue-pulse',
-          isDragging ? 'shadow-lg' : ''
-        )}
-        style={
-          !isActive && cue.background_color
-            ? { backgroundColor: cue.background_color + '33' }
-            : undefined
-        }
+        className="group relative flex"
+        style={{ gap: CF.gap, padding: `0 ${CF.rowPad}px` }}
       >
-        {/* Column 1: drag handle (hover) · cue settings gear · select checkbox (hover) */}
-        <div className="w-10 shrink-0 relative flex items-center justify-center group/col1">
-          {/* Drag handle — appears on hover, top */}
+        {/* Control gutter (drag / settings / select) */}
+        <div
+          className="shrink-0 relative flex items-center justify-center group/col1"
+          style={{ width: CF.c1, boxShadow: depth > 0 ? 'inset 2px 0 0 #3a3a48' : 'none' }}
+        >
           <button
             {...attributes}
             {...listeners}
             title="Drag to reorder"
-            className="absolute top-0.5 left-1/2 -translate-x-1/2 text-zinc-700 hover:text-zinc-400 cursor-grab active:cursor-grabbing opacity-0 group-hover/col1:opacity-100 transition-opacity"
+            className="absolute top-[3px] left-1/2 -translate-x-1/2 text-[#5a5c66] hover:text-[#9ba0ab] cursor-grab active:cursor-grabbing opacity-0 group-hover/col1:opacity-100 transition-opacity"
           >
             <GripVertical className="w-3.5 h-3.5" />
           </button>
 
-          {/* Cue settings gear — opens the cue options menu */}
           <DropdownMenu>
             <DropdownMenuTrigger
               render={
                 <button
                   title="Cue options"
                   data-testid="cue-settings-btn"
-                  className="p-1 rounded text-zinc-600 hover:text-zinc-300 hover:bg-zinc-800 transition-colors"
+                  className="p-[3px] text-[#5a5c66] hover:text-[#c8c9d0] data-[state=open]:bg-[#1d1d24] data-[state=open]:text-[#eef0f3] transition-colors"
                 />
               }
             >
               <Settings className="w-3.5 h-3.5" />
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="bg-zinc-900 border-zinc-700 text-zinc-200 w-44">
-              <DropdownMenuItem
-                onClick={toggleStartType}
-                className="gap-2 text-xs focus:bg-zinc-800 cursor-pointer"
-              >
+            <DropdownMenuContent align="start" side="right" className="bg-[#111116] border-[#2e2e38] text-[#c8c9d0] w-[188px] p-0">
+              <DropdownMenuItem onClick={toggleStartType} className={MI}>
                 {isHard
-                  ? <><Clock className="w-3.5 h-3.5" /> Make soft start</>
-                  : <><AlarmClock className="w-3.5 h-3.5" /> Make hard start</>
-                }
+                  ? <><Clock className="w-3.5 h-3.5 text-[#f0a838]" /> Make soft start</>
+                  : <><AlarmClock className="w-3.5 h-3.5 text-[#9ba0ab]" /> Make hard start</>}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onAddAbove(cue.id)} className={MI}>
+                <Plus className="w-3.5 h-3.5 text-[#9ba0ab]" /> Add cue above
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onAddBelow(cue.id)} className={MI}>
+                <Plus className="w-3.5 h-3.5 text-[#9ba0ab]" /> Add cue below
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onDuplicate(cue.id)} className={MI}>
+                <Copy className="w-3.5 h-3.5 text-[#9ba0ab]" /> Duplicate cue
               </DropdownMenuItem>
 
-              {/* Color picker */}
-              <div className="px-2 py-1.5">
-                <p className="text-xs text-zinc-500 mb-1.5 flex items-center gap-1">
-                  <Palette className="w-3 h-3" /> Background
-                </p>
+              {/* Background swatches */}
+              <div className="px-3.5 py-2 border-t border-b border-[#1d1d24]">
+                <p className="font-cond text-[9px] font-bold uppercase tracking-[0.16em] text-[#888b96] mb-2">Background</p>
                 <div className="flex gap-1 flex-wrap">
                   {CUE_COLORS.map((color, i) => (
                     <button
                       key={i}
                       onClick={() => setColor(color)}
-                      className={cn(
-                        'w-5 h-5 rounded border transition-all',
-                        color === cue.background_color
-                          ? 'border-white scale-110'
-                          : 'border-zinc-700 hover:border-zinc-500'
-                      )}
-                      style={{ backgroundColor: color ?? 'transparent' }}
-                    />
+                      className="w-[22px] h-[22px] flex items-center justify-center transition-transform"
+                      style={{
+                        background: color ?? 'transparent',
+                        border: `1.5px solid ${cue.background_color === color ? '#eef0f3' : '#3a3a48'}`,
+                        transform: cue.background_color === color ? 'scale(1.12)' : 'none',
+                      }}
+                    >
+                      {!color && <span className="text-[#9ba0ab] text-[10px]">✕</span>}
+                    </button>
                   ))}
                 </div>
               </div>
 
-              <DropdownMenuSeparator className="bg-zinc-800" />
-
-              <DropdownMenuItem
-                onClick={() => onDuplicate(cue.id)}
-                className="gap-2 text-xs focus:bg-zinc-800 cursor-pointer"
-              >
-                <Copy className="w-3.5 h-3.5" /> Duplicate
+              <DropdownMenuItem onClick={() => onConvertToHeading(cue.id)} data-testid="convert-to-heading-menu-item" className={MI}>
+                <HeadingIcon className="w-3.5 h-3.5 text-[#9ba0ab]" /> Convert to heading
               </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => onAddAbove(cue.id)}
-                className="gap-2 text-xs focus:bg-zinc-800 cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" /> Add cue above
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => onAddBelow(cue.id)}
-                className="gap-2 text-xs focus:bg-zinc-800 cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" /> Add cue below
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => onConvertToHeading(cue.id)}
-                data-testid="convert-to-heading-menu-item"
-                className="gap-2 text-xs focus:bg-zinc-800 cursor-pointer"
-              >
-                <HeadingIcon className="w-3.5 h-3.5" /> Convert to heading
-              </DropdownMenuItem>
-
-              <DropdownMenuSeparator className="bg-zinc-800" />
+              <DropdownMenuSeparator className="bg-[#1d1d24]" />
               <DropdownMenuItem
                 onClick={handleDelete}
                 data-testid="delete-cue-menu-item"
-                className="gap-2 text-xs text-red-400 focus:bg-zinc-800 focus:text-red-400 cursor-pointer"
+                className="gap-2.5 px-3.5 py-2.5 font-cond text-[11px] font-bold uppercase tracking-[0.1em] text-[#ff5a73] focus:bg-[rgba(255,40,72,0.08)] focus:text-[#ff5a73] cursor-pointer"
               >
                 <Trash2 className="w-3.5 h-3.5" /> Delete cue
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
 
-          {/* Batch-select checkbox — toggles this cue additively (Shift = range) */}
           <button
             onClick={(e) => onSelect(cue.id, { shift: e.shiftKey, meta: true })}
             title="Select cue"
             className={cn(
-              'absolute bottom-0.5 left-1/2 -translate-x-1/2 w-3.5 h-3.5 rounded-[3px] border flex items-center justify-center transition-all',
-              selected
-                ? 'opacity-100 bg-emerald-600 border-emerald-600'
-                : 'opacity-0 group-hover/col1:opacity-100 border-zinc-600 hover:border-zinc-400'
+              'absolute bottom-[3px] left-1/2 -translate-x-1/2 w-3.5 h-3.5 flex items-center justify-center transition-all',
+              selected ? 'opacity-100' : 'opacity-0 group-hover/col1:opacity-100'
             )}
+            style={{
+              background: selected ? '#f0a838' : 'transparent',
+              border: `1px solid ${selected ? '#f0a838' : '#3a3a48'}`,
+            }}
           >
-            {selected && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
+            {selected && <Check className="w-2.5 h-2.5 text-[#06060a]" strokeWidth={3.5} />}
           </button>
         </div>
 
-        {/* Cue number (auto-generated; click to select · jump in live mode) */}
-        <div className="w-12 shrink-0 flex items-center">
-          <span
-            onClick={(e) => {
-              e.stopPropagation()
-              if (live) onJump(cue.id)
-              else onSelect(cue.id, { shift: e.shiftKey, meta: e.metaKey || e.ctrlKey })
-            }}
-            title={live ? 'Jump to this cue' : 'Click to select'}
-            className={cn(
-              'text-xs px-2 rounded cursor-pointer transition-colors tabular-nums',
-              isActive
-                ? 'text-white bg-emerald-600'
-                : selected
-                  ? 'text-white bg-zinc-700'
-                  : 'text-zinc-400 hover:text-zinc-200'
-            )}
-          >
+        {/* Number */}
+        <div
+          onClick={(e) => {
+            e.stopPropagation()
+            if (live) onJump(cue.id)
+            else onSelect(cue.id, { shift: e.shiftKey, meta: e.metaKey || e.ctrlKey })
+          }}
+          title={live ? 'Jump to this cue' : 'Click to select'}
+          style={tile(CF.num, {
+            justifyContent: 'center',
+            cursor: 'pointer',
+            background: isActive ? '#ff2848' : isNext ? 'transparent' : selected ? '#f0a838' : baseCellBg,
+            border: isNext ? '1.5px solid #6b6b76' : 'none',
+          })}
+        >
+          <span className="font-mono text-sm font-bold tabular-nums" style={{ color: numColor }}>
             {displayNumber}
           </span>
         </div>
 
-        {/* Start time — editable when hard or the first (anchor) cue, else derived/read-only */}
+        {/* Start time */}
         <div
-          className="w-[84px] shrink-0 relative flex flex-col justify-center px-2"
-          title={
-            isHard
-              ? 'Hard start — click to edit time'
-              : isFirst
-                ? 'Show start (anchor) — click to edit'
-                : 'Soft start — derived from the previous cue'
-          }
+          style={tile(CF.start, { flexDirection: 'column', justifyContent: 'flex-start', alignItems: 'flex-start', gap: 2, cursor: isHard || isFirst ? 'text' : 'default', position: 'relative' })}
+          onClick={() => (isHard || isFirst) && startStartEdit()}
+          title={isHard ? 'Hard start — click to edit time' : isFirst ? 'Show start (anchor) — click to edit' : 'Soft start — derived from the previous cue'}
         >
           {editingStart ? (
             <input
@@ -451,126 +403,88 @@ export function CueRow({
               value={startInput}
               onChange={(e) => setStartInput(e.target.value)}
               onBlur={saveStart}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') saveStart()
-                if (e.key === 'Escape') setEditingStart(false)
-              }}
-              className="w-full bg-zinc-800 border border-zinc-600 rounded px-1 py-0.5 text-xs text-white font-mono outline-none focus:ring-1 focus:ring-zinc-500"
+              onKeyDown={(e) => { if (e.key === 'Enter') saveStart(); if (e.key === 'Escape') setEditingStart(false) }}
+              className="w-full bg-[#0a0a0d] border border-[#f0a838] px-1 py-0.5 text-xs text-[#eef0f3] font-mono outline-none"
             />
           ) : isHard || isFirst ? (
-            <button
-              onClick={startStartEdit}
-              className={cn(
-                'flex items-center gap-1 text-xs font-mono tabular-nums transition-colors text-left',
-                isActive
-                  ? 'text-red-400 font-semibold'
-                  : isHard
-                    ? 'text-amber-400 hover:text-amber-300'
-                    : 'text-zinc-400 hover:text-zinc-200'
-              )}
-            >
-              {isHard && <Pin className="w-2.5 h-2.5 shrink-0 -rotate-45 fill-current" />}
-              {startTimeLabel}
-            </button>
-          ) : (
             <span
-              className={cn(
-                'text-xs font-mono tabular-nums',
-                isActive ? 'text-red-400 font-semibold' : 'text-zinc-500'
-              )}
+              className="inline-flex items-center gap-1 font-mono text-[13px] tabular-nums"
+              style={{ fontWeight: isHard ? 600 : 400, color: isActive ? ct.hi : isHard ? '#eef0f3' : ct.mid }}
             >
               {startTimeLabel}
+              {isHard && <Pin className="w-2.5 h-2.5 shrink-0 -rotate-45 fill-current ml-0.5" />}
             </span>
+          ) : (
+            <span className="font-mono text-[13px] tabular-nums" style={{ color: ct.mid }}>{startTimeLabel}</span>
           )}
 
-          {/* Auto-start link to the next cue (down arrow when enabled) */}
-          {nextAutoStart !== null && (
+          {/* Auto-start chevron to next cue (hidden during live) */}
+          {!live && nextAutoStart !== null && (
             <button
               data-testid="autostart-toggle"
               data-on={nextAutoStart ? '1' : '0'}
-              onClick={(e) => {
-                e.stopPropagation()
-                onToggleNextAutoStart()
-              }}
-              title={
-                nextAutoStart
-                  ? 'Disable auto-start of next cue'
-                  : 'Enable auto-start of next cue'
-              }
+              onClick={(e) => { e.stopPropagation(); onToggleNextAutoStart() }}
+              title={nextAutoStart ? 'Disable auto-start of next cue' : 'Enable auto-start of next cue'}
               className={cn(
-                'absolute left-1/2 -translate-x-1/2 -bottom-2 z-20 flex items-center justify-center w-5 h-4 rounded transition-all',
-                nextAutoStart
-                  ? 'text-emerald-400'
-                  : 'text-zinc-700 hover:text-zinc-400 opacity-0 group-hover:opacity-100'
+                'absolute left-1/2 -translate-x-1/2 -bottom-[13px] z-20 flex items-center justify-center w-5 h-[18px] transition-colors',
+                !nextAutoStart && 'opacity-0 group-hover:opacity-100'
               )}
+              style={{ background: '#09090d', border: '1px solid #1d1d24', color: nextAutoStart ? '#eef0f3' : '#3a3a48' }}
             >
-              <ChevronDown
-                className="w-3.5 h-3.5"
-                strokeWidth={nextAutoStart ? 2.75 : 2}
-              />
+              <ChevronDown className="w-3 h-3" strokeWidth={nextAutoStart ? 2.75 : 2} />
             </button>
           )}
         </div>
 
-        {/* Duration (shows elapsed count-up for the active cue in live mode) */}
-        <div className="w-[76px] shrink-0 flex flex-col justify-center px-1">
+        {/* Duration */}
+        <div
+          style={tile(CF.dur, { flexDirection: 'column', justifyContent: 'flex-start', alignItems: 'flex-start', gap: 1, cursor: 'text' })}
+          onClick={() => !editingDuration && !(isActive && live) && startDurationEdit()}
+        >
           {editingDuration ? (
             <input
               ref={durationRef}
               value={durationInput}
               onChange={(e) => setDurationInput(e.target.value)}
               onBlur={saveDuration}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') saveDuration()
-                if (e.key === 'Escape') setEditingDuration(false)
-              }}
-              className="w-full bg-zinc-800 border border-zinc-600 rounded px-1.5 py-0.5 text-xs text-white font-mono outline-none focus:ring-1 focus:ring-zinc-500"
+              onKeyDown={(e) => { if (e.key === 'Enter') saveDuration(); if (e.key === 'Escape') setEditingDuration(false) }}
+              className="w-full bg-[#0a0a0d] border border-[#f0a838] px-1 py-0.5 text-[13px] text-[#eef0f3] font-mono outline-none"
             />
           ) : isActive && liveRemainingMs != null ? (
             <>
-              <span className="text-[10px] font-mono tabular-nums text-zinc-600 leading-none">
+              <span className="font-mono text-[10px] tabular-nums leading-none" style={{ color: ct.mid }}>
                 {formatDuration(cue.duration_ms)}
               </span>
-              <span
-                className={cn(
-                  'text-xs font-mono font-semibold tabular-nums',
-                  liveOvertime ? 'text-red-400' : 'text-emerald-400'
-                )}
-              >
+              <span className="font-mono text-[21px] font-bold tabular-nums leading-[1.1]" style={{ color: remColor }}>
                 {liveOvertime ? '+' : ''}{formatDuration(Math.abs(liveRemainingMs))}
               </span>
             </>
           ) : (
-            <button
-              onClick={startDurationEdit}
-              className="text-xs font-mono tabular-nums text-zinc-400 hover:text-white transition-colors px-1 py-0.5 rounded hover:bg-zinc-800 w-full text-left"
-            >
+            <span className="font-mono text-[15px] font-semibold tabular-nums" style={{ color: ct.hi }}>
               {formatDuration(cue.duration_ms)}
-            </button>
+            </span>
           )}
         </div>
 
         {/* Title + subtitle */}
-        <div className="group/title shrink-0 flex flex-col justify-center px-3 py-1" style={{ width: titleWidth }}>
+        <div className="group/title shrink-0 flex flex-col" style={{ width: titleWidth, minHeight: CF.minRowH, background: baseCellBg, padding: '12px 16px' }}>
           {editingTitle ? (
             <input
               autoFocus
               value={titleInput}
               onChange={(e) => setTitleInput(e.target.value)}
               onBlur={saveTitle}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') saveTitle()
-                if (e.key === 'Escape') { setEditingTitle(false); setTitleInput(cue.title) }
-              }}
-              className="w-full bg-transparent text-sm text-white outline-none border-b border-zinc-500"
+              onKeyDown={(e) => { if (e.key === 'Enter') saveTitle(); if (e.key === 'Escape') { setEditingTitle(false); setTitleInput(cue.title) } }}
+              className="w-full bg-transparent text-[15px] font-medium outline-none border-b border-[#f0a838]"
+              style={{ color: ct.hi }}
             />
           ) : (
             <button
               onClick={() => setEditingTitle(true)}
-              className="text-sm text-left w-full break-words transition-colors"
-              style={{ color: cue.background_color ? '#fff' : undefined }}
+              className="text-[16px] font-medium text-left w-full leading-[1.35] break-words [overflow-wrap:anywhere] transition-colors"
+              style={{ color: cue.title ? ct.hi : (cue.background_color ? ct.mid : '#6b6d78'), fontStyle: cue.title ? 'normal' : 'italic' }}
             >
-              {cue.title || <span className="text-zinc-700 italic">Untitled cue</span>}
+              {cue.title || 'Untitled cue'}
             </button>
           )}
 
@@ -580,31 +494,31 @@ export function CueRow({
               value={subtitleInput}
               onChange={(e) => setSubtitleInput(e.target.value)}
               onBlur={saveSubtitle}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') saveSubtitle()
-                if (e.key === 'Escape') { setEditingSubtitle(false); setSubtitleInput(cue.subtitle ?? '') }
-              }}
+              onKeyDown={(e) => { if (e.key === 'Enter') saveSubtitle(); if (e.key === 'Escape') { setEditingSubtitle(false); setSubtitleInput(cue.subtitle ?? '') } }}
               placeholder="Subtitle"
-              className="w-full bg-transparent text-xs text-zinc-400 outline-none border-b border-zinc-600 mt-0.5"
+              className="w-full bg-transparent text-xs outline-none border-b border-[#3a3a48] mt-0.5"
+              style={{ color: ct.mid }}
             />
           ) : cue.subtitle ? (
             <button
               onClick={() => setEditingSubtitle(true)}
-              className="text-xs text-left w-full break-words text-zinc-500 hover:text-zinc-400 transition-colors"
+              className="text-xs text-left w-full break-words [overflow-wrap:anywhere] mt-0.5 leading-[1.3] transition-colors"
+              style={{ color: ct.mid }}
             >
               {cue.subtitle}
             </button>
           ) : (
             <button
               onClick={() => setEditingSubtitle(true)}
-              className="text-xs text-left w-full text-zinc-700 hover:text-zinc-500 opacity-0 group-hover/title:opacity-100 transition-opacity italic"
+              className="text-xs text-left w-full mt-0.5 italic opacity-0 group-hover/title:opacity-100 transition-opacity"
+              style={{ color: cue.background_color ? ct.mid : '#5a5c66' }}
             >
               Add a subtitle…
             </button>
           )}
         </div>
 
-        {/* Dynamic cells + Private Notes, interleaved by privateNotesIndex */}
+        {/* Dynamic cells + Private Notes (interleaved by privateNotesIndex) */}
         {(() => {
           const insertAt = Math.min(Math.max(0, privateNotesIndex), columns.length)
           const mergedIds = columns.map((c) => c.id as string)
@@ -612,11 +526,7 @@ export function CueRow({
           return mergedIds.map((id) => {
             if (id === PRIVATE_NOTES_ID) {
               return (
-                <div
-                  key={PRIVATE_NOTES_ID}
-                  style={{ width: PRIVATE_NOTES_WIDTH }}
-                  className="shrink-0 border-l border-amber-900/30 bg-amber-950/10 flex items-center px-1"
-                >
+                <div key={PRIVATE_NOTES_ID} style={tile(PRIVATE_NOTES_WIDTH, { padding: '10px 2px' })}>
                   <PrivateNoteCell
                     cueId={cue.id}
                     rundownId={rundownId}
@@ -629,11 +539,7 @@ export function CueRow({
             const col = columns.find((c) => c.id === id)
             if (!col) return null
             return (
-              <div
-                key={col.id}
-                style={{ width: col.width }}
-                className="shrink-0 border-l border-zinc-800/60 flex items-center px-1"
-              >
+              <div key={col.id} style={tile(col.width, { padding: '10px 2px' })}>
                 {col.col_type === 'dropdown' ? (
                   <DropdownCell
                     cueId={cue.id}
@@ -658,14 +564,13 @@ export function CueRow({
           })
         })()}
 
-        {/* Live progress bar — rAF-driven for smooth animation */}
+        {/* Live progress bar — sits in the gap below the active cue (rAF-driven) */}
         {isActive && cue.duration_ms > 0 && (
-          <div className="absolute bottom-0 left-0 right-0 h-[3px] bg-zinc-800/60 pointer-events-none">
-            <div
-              ref={progressBarRef}
-              className="h-full"
-              style={{ width: '0%' }}
-            />
+          <div
+            className="absolute pointer-events-none"
+            style={{ left: labelIndent, right: CF.rowPad, bottom: -5, height: 3, background: 'rgba(255,255,255,0.10)', zIndex: 15 }}
+          >
+            <div ref={progressBarRef} className="h-full" style={{ width: '0%' }} />
           </div>
         )}
       </div>

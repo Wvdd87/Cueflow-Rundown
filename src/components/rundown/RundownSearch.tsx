@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Search, Hash, Heading as HeadingIcon } from 'lucide-react'
+import { Search } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export interface SearchCue {
@@ -90,9 +90,12 @@ export function RundownSearch({ cues, onSelect }: RundownSearchProps) {
   }
 
   return (
-    <div ref={containerRef} className="relative">
-      <div className="flex items-center gap-1.5 bg-zinc-800 border border-zinc-700 rounded-md px-2.5 py-1.5 w-48 focus-within:border-zinc-500 transition-colors">
-        <Search className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
+    <div ref={containerRef} className="relative w-60 shrink-0">
+      <div className={cn(
+        'flex items-center gap-2 h-9 px-2.5 bg-[#111116] border transition-colors',
+        open ? 'border-[#3a3a48]' : 'border-[#22222a]'
+      )}>
+        <Search className="w-3.5 h-3.5 text-[#888b96] shrink-0" />
         <input
           ref={inputRef}
           value={query}
@@ -103,12 +106,12 @@ export function RundownSearch({ cues, onSelect }: RundownSearchProps) {
           onFocus={() => { if (query) setOpen(true) }}
           onKeyDown={handleKeyDown}
           placeholder="Search cues…"
-          className="bg-transparent text-sm text-white placeholder:text-zinc-600 outline-none w-full"
+          className="bg-transparent text-[13px] text-[#eef0f3] placeholder:text-[#5a5c66] outline-none w-full"
         />
       </div>
 
       {open && results.length > 0 && (
-        <div className="absolute top-full left-0 mt-1 w-72 bg-zinc-900 border border-zinc-700 rounded-md shadow-xl z-50 max-h-72 overflow-y-auto">
+        <div className="absolute top-[calc(100%+6px)] left-0 w-72 bg-[#111116] border border-[#2e2e38] shadow-[0_18px_50px_rgba(0,0,0,0.8)] z-[620] max-h-[340px] overflow-y-auto">
           {results.map((c, i) => (
             <button
               key={c.id}
@@ -117,27 +120,32 @@ export function RundownSearch({ cues, onSelect }: RundownSearchProps) {
                 handleSelect(c.id)
               }}
               className={cn(
-                'w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors',
-                i === activeIndex ? 'bg-zinc-700' : 'hover:bg-zinc-800'
+                'w-full flex items-center gap-2.5 px-3.5 py-2.5 text-left transition-colors',
+                i > 0 && 'border-t border-[#1d1d24]',
+                i === activeIndex ? 'bg-[#16161c]' : 'hover:bg-[#16161c]'
               )}
             >
-              {c.cue_type === 'heading' ? (
-                <HeadingIcon className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
-              ) : (
-                <Hash className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+              <span className="font-mono text-[12px] font-bold w-7 shrink-0" style={{ color: c.cue_type === 'heading' ? '#7c7e8a' : '#f0a838' }}>
+                {c.cue_type === 'heading' ? '§' : (c.displayNumber || '')}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[13px] text-[#eef0f3] truncate">
+                  {c.title || <span className="text-[#5a5c66] italic">Untitled</span>}
+                </span>
+              </span>
+              {c.cue_type === 'heading' && (
+                <span className="font-cond text-[9px] font-bold uppercase tracking-[0.12em] text-[#5a5c66] shrink-0">
+                  Heading
+                </span>
               )}
-              {c.displayNumber && (
-                <span className="text-xs font-mono text-zinc-400 shrink-0">{c.displayNumber}</span>
-              )}
-              <span className="text-sm text-white truncate">{c.title || <span className="text-zinc-500 italic">Untitled</span>}</span>
             </button>
           ))}
         </div>
       )}
 
       {open && query.trim() && results.length === 0 && (
-        <div className="absolute top-full left-0 mt-1 w-72 bg-zinc-900 border border-zinc-700 rounded-md shadow-xl z-50 px-3 py-3">
-          <p className="text-sm text-zinc-500">No cues match &ldquo;{query}&rdquo;</p>
+        <div className="absolute top-[calc(100%+6px)] left-0 w-72 bg-[#111116] border border-[#2e2e38] shadow-[0_18px_50px_rgba(0,0,0,0.8)] z-[620] px-4 py-3.5">
+          <p className="text-[12.5px] text-[#5a5c66] italic">No cues match “{query}”</p>
         </div>
       )}
     </div>

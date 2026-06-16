@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react'
 import {
   GripVertical,
   Settings,
-  Check,
   ChevronDown,
   ChevronRight,
   Ungroup,
@@ -21,9 +20,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { formatMsToTime } from '@/lib/timing'
-import { cn } from '@/lib/utils'
+import { formatMsToTimeDisplay } from '@/lib/timing'
+import { CF, CUE_COLORS, textOn } from './layout'
 import type { Cue } from '@/lib/supabase/types'
+import type { TimeDisplay } from '@/lib/timing'
 
 function formatLong(ms: number): string {
   const total = Math.floor(Math.max(0, ms) / 1000)
@@ -40,6 +40,8 @@ interface GroupHeaderRowProps {
   aggregate: { durationMs: number; startMs: number; endMs: number; count: number }
   collapsed: boolean
   selected: boolean
+  rowWidth: number
+  timeFormat?: TimeDisplay
   onToggleCollapse: () => void
   onSelect: (id: string, mods: { shift: boolean; meta: boolean }) => void
   onUpdate: (id: string, updates: Partial<Cue>) => void
@@ -48,6 +50,8 @@ interface GroupHeaderRowProps {
   onConvertToCue?: (id: string) => void
 }
 
+const MI = 'gap-2.5 px-3.5 py-2.5 font-cond text-[11px] font-bold uppercase tracking-[0.1em] text-[#c8c9d0] focus:bg-[#16161c] focus:text-[#eef0f3] cursor-pointer'
+
 export function GroupHeaderRow({
   heading,
   number,
@@ -55,6 +59,8 @@ export function GroupHeaderRow({
   aggregate,
   collapsed,
   selected,
+  rowWidth,
+  timeFormat = 'auto',
   onToggleCollapse,
   onSelect,
   onUpdate,
@@ -62,12 +68,13 @@ export function GroupHeaderRow({
   onDelete,
   onConvertToCue,
 }: GroupHeaderRowProps) {
+  const isGroup = aggregate.count > 0
   const [editing, setEditing] = useState(false)
-  const [title, setTitle] = useState(heading.title || 'New group')
+  const [title, setTitle] = useState(heading.title || (isGroup ? 'New group' : ''))
 
   useEffect(() => {
-    setTitle(heading.title || 'New group')
-  }, [heading.title])
+    setTitle(heading.title || (isGroup ? 'New group' : ''))
+  }, [heading.title, isGroup])
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: heading.id })
@@ -75,25 +82,56 @@ export function GroupHeaderRow({
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.5 : 1,
+    width: rowWidth,
+    minHeight: CF.minRowH,
+    marginTop: isGroup ? 18 : 30,
+    marginBottom: CF.gap,
+    gap: CF.gap,
+    padding: `0 ${CF.rowPad}px`,
   }
 
   async function saveTitle() {
     setEditing(false)
-    const t = title.trim() || 'New group'
+    const fallback = isGroup ? 'New group' : ''
+    const t = title.trim() || fallback
     if (t === heading.title) return
     onUpdate(heading.id, { title: t })
     await updateCue(heading.id, rundownId, { title: t })
   }
 
+  async function setColor(color: string | null) {
+    onUpdate(heading.id, { background_color: color })
+    await updateCue(heading.id, rundownId, { background_color: color })
+  }
+
+  const ct = textOn(heading.background_color)
+  const bandBg = heading.background_color
+    ? heading.background_color
+    : isGroup
+      ? (selected ? 'rgba(240,168,56,0.18)' : '#1a1a20')
+      : (selected ? 'rgba(240,168,56,0.14)' : '#15151b')
+  const bandBorder = selected
+    ? 'rgba(240,168,56,0.4)'
+    : heading.background_color ? 'transparent' : '#26262e'
+
   return (
-    <div ref={setNodeRef} style={style} className="flex items-stretch min-h-[44px]" data-cue-id={heading.id}>
-      {/* Column 1: drag / settings / select */}
-      <div className="w-10 shrink-0 relative flex items-center justify-center group/col1">
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="flex items-stretch"
+      data-cue-id={heading.id}
+      onClick={(e) => e.stopPropagation()}
+    >
+      {/* Control gutter */}
+      <div
+        className="shrink-0 relative flex items-center justify-center group/col1"
+        style={{ width: CF.c1 }}
+      >
         <button
           {...attributes}
           {...listeners}
-          title="Drag to reorder group"
-          className="absolute top-1 left-1/2 -translate-x-1/2 text-zinc-600 hover:text-zinc-300 cursor-grab active:cursor-grabbing opacity-0 group-hover/col1:opacity-100 transition-opacity"
+          title="Drag to reorder"
+          className="absolute top-[5px] left-1/2 -translate-x-1/2 text-[#5a5c66] hover:text-[#9ba0ab] cursor-grab active:cursor-grabbing opacity-0 group-hover/col1:opacity-100 transition-opacity"
         >
           <GripVertical className="w-3.5 h-3.5" />
         </button>
@@ -102,120 +140,129 @@ export function GroupHeaderRow({
           <DropdownMenuTrigger
             render={
               <button
-                title="Group options"
-                className="p-1 rounded text-zinc-500 hover:text-zinc-200 hover:bg-zinc-700 transition-colors"
+                title={isGroup ? 'Group options' : 'Heading options'}
+                className="p-[3px] text-[#888b96] hover:text-[#eef0f3] data-[state=open]:bg-[#1d1d24] data-[state=open]:text-[#eef0f3] transition-colors"
               />
             }
           >
             <Settings className="w-3.5 h-3.5" />
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="bg-zinc-900 border-zinc-700 text-zinc-200 w-44">
-            {aggregate.count > 0 && (
-              <DropdownMenuItem
-                onClick={() => onUngroup(heading.id)}
-                className="gap-2 text-xs focus:bg-zinc-800 cursor-pointer"
-              >
-                <Ungroup className="w-3.5 h-3.5" /> Ungroup
-              </DropdownMenuItem>
+          <DropdownMenuContent align="start" side="right" className="bg-[#111116] border-[#2e2e38] text-[#c8c9d0] w-[190px] p-0">
+            {!isGroup && (
+              <div className="px-3.5 py-2 border-b border-[#1d1d24]">
+                <p className="font-cond text-[9px] font-bold uppercase tracking-[0.16em] text-[#888b96] mb-2">Background</p>
+                <div className="flex gap-1 flex-wrap">
+                  {CUE_COLORS.map((color, i) => (
+                    <button
+                      key={i}
+                      onClick={() => setColor(color)}
+                      className="w-[22px] h-[22px] flex items-center justify-center transition-transform"
+                      style={{
+                        background: color ?? 'transparent',
+                        border: `1.5px solid ${heading.background_color === color ? '#eef0f3' : '#3a3a48'}`,
+                        transform: heading.background_color === color ? 'scale(1.12)' : 'none',
+                      }}
+                    >
+                      {!color && <span className="text-[#9ba0ab] text-[10px]">✕</span>}
+                    </button>
+                  ))}
+                </div>
+              </div>
             )}
-            {aggregate.count === 0 && onConvertToCue && (
-              <DropdownMenuItem
-                onClick={() => onConvertToCue(heading.id)}
-                className="gap-2 text-xs focus:bg-zinc-800 cursor-pointer"
-              >
-                <AlignLeft className="w-3.5 h-3.5" /> Convert to cue
+            {isGroup ? (
+              <DropdownMenuItem onClick={() => onUngroup(heading.id)} className={MI}>
+                <Ungroup className="w-3.5 h-3.5 text-[#9ba0ab]" /> Ungroup
               </DropdownMenuItem>
+            ) : (
+              onConvertToCue && (
+                <DropdownMenuItem onClick={() => onConvertToCue(heading.id)} className={MI}>
+                  <AlignLeft className="w-3.5 h-3.5 text-[#9ba0ab]" /> Convert to cue
+                </DropdownMenuItem>
+              )
             )}
-            <DropdownMenuSeparator className="bg-zinc-800" />
+            <DropdownMenuSeparator className="bg-[#1d1d24]" />
             <DropdownMenuItem
               onClick={() => onDelete(heading.id)}
-              className="gap-2 text-xs text-red-400 focus:bg-zinc-800 focus:text-red-400 cursor-pointer"
+              className="gap-2.5 px-3.5 py-2.5 font-cond text-[11px] font-bold uppercase tracking-[0.1em] text-[#ff5a73] focus:bg-[rgba(255,40,72,0.08)] focus:text-[#ff5a73] cursor-pointer"
             >
-              <Trash2 className="w-3.5 h-3.5" /> Delete
+              <Trash2 className="w-3.5 h-3.5" /> {isGroup ? 'Delete group' : 'Delete heading'}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-
-        <button
-          onClick={(e) => onSelect(heading.id, { shift: e.shiftKey, meta: true })}
-          title="Select group"
-          className={cn(
-            'absolute bottom-1 left-1/2 -translate-x-1/2 w-3.5 h-3.5 rounded-[3px] border flex items-center justify-center transition-all',
-            selected
-              ? 'opacity-100 bg-emerald-600 border-emerald-600'
-              : 'opacity-0 group-hover/col1:opacity-100 border-zinc-600 hover:border-zinc-400'
-          )}
-        >
-          {selected && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
-        </button>
       </div>
 
-      {/* Number (click to select the group) */}
-      <div className="w-12 shrink-0 flex items-center">
-        <span
-          onClick={(e) =>
-            onSelect(heading.id, { shift: e.shiftKey, meta: e.metaKey || e.ctrlKey })
-          }
-          title="Click to select group"
-          className={cn(
-            'text-xs px-2 rounded font-medium cursor-pointer transition-colors',
-            selected ? 'text-white bg-zinc-700' : 'text-zinc-400 hover:text-zinc-200'
-          )}
-        >
-          {number}
-        </span>
-      </div>
-
-      {/* Group band */}
+      {/* Band — spans from the gutter to the private-notes edge, fills row height */}
       <div
-        className={cn(
-          'grow min-w-0 my-1 mr-1 rounded-md px-3 py-1.5 flex items-center gap-3',
-          selected ? 'bg-emerald-900/40' : 'bg-zinc-700/50'
-        )}
+        className="flex-1 min-w-0 flex items-center"
+        style={{ background: bandBg, border: `1px solid ${bandBorder}`, paddingRight: 14 }}
       >
-        <div className="min-w-0 flex-1">
+        {/* Number — fixed box aligned with the cue-number column */}
+        <div className="shrink-0 flex items-center justify-center" style={{ width: CF.num }}>
+          {isGroup ? (
+            <span
+              onClick={(e) => { e.stopPropagation(); onSelect(heading.id, { shift: e.shiftKey, meta: e.metaKey || e.ctrlKey }) }}
+              title="Click to select group"
+              className="font-mono text-sm font-bold cursor-pointer px-[9px] py-0.5"
+              style={{ color: selected ? '#06060a' : '#9ba0ab', background: selected ? '#f0a838' : 'transparent' }}
+            >
+              {number}
+            </span>
+          ) : (
+            <span className="font-mono text-sm font-bold" style={{ color: heading.background_color ? ct.mid : '#7c7e8a' }}>
+              {number}
+            </span>
+          )}
+        </div>
+
+        {/* Title + (group) aggregate */}
+        <div className="flex-1 min-w-0 pl-1">
           {editing ? (
             <input
               autoFocus
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               onBlur={saveTitle}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') saveTitle()
-                if (e.key === 'Escape') { setEditing(false); setTitle(heading.title || 'New group') }
-              }}
-              className="w-full bg-transparent text-sm font-semibold text-white outline-none border-b border-zinc-500"
+              onKeyDown={(e) => { if (e.key === 'Enter') saveTitle(); if (e.key === 'Escape') { setEditing(false); setTitle(heading.title || (isGroup ? 'New group' : '')) } }}
+              className="w-full bg-transparent outline-none border-b border-[#f0a838]"
+              style={{ fontSize: isGroup ? 14 : 16, fontWeight: isGroup ? 600 : 700, color: heading.background_color ? ct.hi : '#fff' }}
             />
           ) : (
             <button
               onClick={() => setEditing(true)}
-              className="text-sm font-semibold text-white text-left truncate w-full"
+              className="text-left w-full break-words [overflow-wrap:anywhere]"
+              style={{
+                fontSize: isGroup ? 14 : 16,
+                fontWeight: isGroup ? 600 : 700,
+                letterSpacing: isGroup ? undefined : '0.01em',
+                color: heading.title ? (heading.background_color ? ct.hi : '#eef0f3') : '#5a5c66',
+                fontStyle: heading.title ? 'normal' : 'italic',
+              }}
             >
-              {heading.title || 'New group'}
+              {heading.title || (isGroup ? 'New group' : 'Untitled heading')}
             </button>
           )}
-          <div className="flex items-center gap-2 text-[11px] text-zinc-400 font-mono tabular-nums mt-0.5">
-            <span>{formatLong(aggregate.durationMs)}</span>
-            {aggregate.count > 0 && (
-              <span className="text-zinc-500">
-                {formatMsToTime(aggregate.startMs)} → {formatMsToTime(aggregate.endMs)}
+          {isGroup && (
+            <div className="flex items-center gap-2.5 mt-0.5 font-mono text-[11px] text-[#888b96]">
+              <span>{formatLong(aggregate.durationMs)}</span>
+              <span className="text-[#5a5c66]">
+                {formatMsToTimeDisplay(aggregate.startMs, timeFormat)} → {formatMsToTimeDisplay(aggregate.endMs, timeFormat)}
               </span>
-            )}
-          </div>
+              <span className="text-[#5a5c66]">· {aggregate.count} cue{aggregate.count === 1 ? '' : 's'}</span>
+            </div>
+          )}
         </div>
 
-        <button
-          data-testid="group-collapse"
-          onClick={onToggleCollapse}
-          title={collapsed ? 'Expand group' : 'Collapse group'}
-          className="shrink-0 text-zinc-400 hover:text-white transition-colors"
-        >
-          {collapsed ? (
-            <ChevronRight className="w-5 h-5" />
-          ) : (
-            <ChevronDown className="w-5 h-5" />
-          )}
-        </button>
+        {/* Collapse chevron (group only) */}
+        {isGroup && (
+          <button
+            data-testid="group-collapse"
+            onClick={onToggleCollapse}
+            title={collapsed ? 'Expand group' : 'Collapse group'}
+            className="shrink-0 text-[#9ba0ab] hover:text-[#eef0f3] transition-colors"
+          >
+            {collapsed ? <ChevronRight className="w-[18px] h-[18px]" /> : <ChevronDown className="w-[18px] h-[18px]" />}
+          </button>
+        )}
       </div>
     </div>
   )

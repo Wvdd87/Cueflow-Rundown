@@ -1,7 +1,7 @@
 import { STATUS_CONFIG, normalizeStatus } from '@/lib/rundownStatus'
 import { cn } from '@/lib/utils'
 
-/** Small status pill (icon + label + colour) — shared by the dashboard and
+/** Small CueFlow status badge (dot + label) — shared by the dashboard and
  *  anywhere a rundown's status is shown at a glance. */
 export function StatusBadge({
   status,
@@ -11,16 +11,16 @@ export function StatusBadge({
   className?: string
 }) {
   const meta = STATUS_CONFIG[normalizeStatus(status)]
-  const Icon = meta.icon
+  const cf = meta.cf
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full',
-        meta.badge,
+        'inline-flex items-center gap-1.5 px-2 py-0.5 font-cond text-[9px] font-bold uppercase tracking-[0.12em] whitespace-nowrap',
         className
       )}
+      style={{ background: cf.bg, border: `1px solid ${cf.bd}`, color: cf.fg }}
     >
-      <Icon className="w-2.5 h-2.5" />
+      <span className="w-1.5 h-1.5 rounded-full" style={{ background: cf.dot }} />
       {meta.label}
     </span>
   )

@@ -1,11 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
-import { EventCard } from '@/components/dashboard/EventCard'
-import { RundownCard } from '@/components/dashboard/RundownCard'
-import { TemplateCard } from '@/components/dashboard/TemplateCard'
+import { DashboardTabs } from '@/components/dashboard/DashboardTabs'
 import { CreateEventDialog } from '@/components/dashboard/CreateEventDialog'
 import { CreateRundownDialog } from '@/components/dashboard/CreateRundownDialog'
 import { UserMenu } from '@/components/dashboard/UserMenu'
-import { Layers } from 'lucide-react'
 import type { Event, Rundown } from '@/lib/supabase/types'
 
 export default async function DashboardPage() {
@@ -26,18 +23,19 @@ export default async function DashboardPage() {
   if (!teamId) {
     return (
       <div className="flex items-center justify-center h-full">
-        <p className="text-zinc-500 text-sm">Setting up your workspace…</p>
+        <p className="text-[#888b96] text-sm">Setting up your workspace…</p>
       </div>
     )
   }
 
-  const [{ data: eventsData }, { data: rundownsData }, { data: templatesData }] =
+  const [{ data: teamData }, { data: eventsData }, { data: rundownsData }, { data: templatesData }] =
     await Promise.all([
+      supabase.from('teams').select('name').eq('id', teamId).single(),
       supabase
         .from('events')
         .select('*')
         .eq('team_id', teamId)
-        .order('created_at', { ascending: false }),
+        .order('event_date', { ascending: true, nullsFirst: true }),
       supabase
         .from('rundowns')
         .select('*')
@@ -52,8 +50,8 @@ export default async function DashboardPage() {
         .order('updated_at', { ascending: false }),
     ])
 
+  const teamName = (teamData as { name: string } | null)?.name ?? 'Workspace'
   const allEvents = (eventsData ?? []) as Event[]
-  // filter out trashed rows in JS so this stays graceful before the migration
   const allRundowns = ((rundownsData ?? []) as Rundown[]).filter((r) => !r.deleted_at)
   const templates = ((templatesData ?? []) as Rundown[]).filter((r) => !r.deleted_at)
   const standaloneRundowns = allRundowns.filter((r) => !r.event_id)
@@ -63,96 +61,41 @@ export default async function DashboardPage() {
     return acc
   }, {})
 
-  const hasContent =
-    allEvents.length > 0 || allRundowns.length > 0 || templates.length > 0
+  const summary = `${allEvents.length} event${allEvents.length === 1 ? '' : 's'} · ${allRundowns.length} rundown${allRundowns.length === 1 ? '' : 's'}`
 
   return (
-    <div className="max-w-3xl mx-auto px-6 py-8">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-8">
-        <h1 className="text-xl font-semibold text-white">Dashboard</h1>
-        <div className="flex items-center gap-2">
-          <CreateEventDialog />
-          <CreateRundownDialog events={allEvents} templates={templates} />
-          <UserMenu email={user.email ?? ''} fullName={profile?.full_name ?? null} />
+    <div className="min-h-full bg-[#09090d]">
+      {/* Top header */}
+      <header className="h-14 flex items-center gap-3.5 px-6 bg-[#07070a] border-b border-[#1d1d24]">
+        <div className="w-[30px] h-[30px] bg-[#f0a838] flex items-center justify-center shrink-0">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#06060a" strokeWidth="2.5" strokeLinecap="square">
+            <line x1="7" y1="6" x2="20" y2="6" />
+            <line x1="7" y1="12" x2="20" y2="12" />
+            <line x1="7" y1="18" x2="20" y2="18" />
+            <line x1="3" y1="6" x2="3" y2="6" strokeLinecap="round" strokeWidth="3.2" />
+            <line x1="3" y1="12" x2="3" y2="12" strokeLinecap="round" strokeWidth="3.2" />
+            <line x1="3" y1="18" x2="3" y2="18" strokeLinecap="round" strokeWidth="3.2" />
+          </svg>
         </div>
-      </div>
+        <span className="font-cond text-sm font-bold uppercase tracking-[0.08em] text-[#eef0f3]">Cueflow</span>
+        <div className="w-px h-5 bg-[#22222a]" />
+        <span className="text-[13px] text-[#9ba0ab] truncate">{teamName}</span>
 
-      {!hasContent ? (
-        <EmptyState allEvents={allEvents} templates={templates} />
-      ) : (
-        <div className="space-y-8">
-          {/* Events section */}
-          {allEvents.length > 0 && (
-            <section>
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-sm font-medium text-zinc-400 uppercase tracking-wider">Events</h2>
-              </div>
-              <div className="space-y-2">
-                {allEvents.map((event) => (
-                  <EventCard
-                    key={event.id}
-                    event={event}
-                    rundowns={rundownsByEvent[event.id] ?? []}
-                    allEvents={allEvents}
-                  />
-                ))}
-              </div>
-            </section>
-          )}
+        <div className="flex-1" />
 
-          {/* Standalone rundowns */}
-          {standaloneRundowns.length > 0 && (
-            <section>
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-sm font-medium text-zinc-400 uppercase tracking-wider">Rundowns</h2>
-              </div>
-              <div className="space-y-1.5">
-                {standaloneRundowns.map((rundown) => (
-                  <RundownCard key={rundown.id} rundown={rundown} allEvents={allEvents} />
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* Templates */}
-          {templates.length > 0 && (
-            <section>
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-sm font-medium text-zinc-400 uppercase tracking-wider">Templates</h2>
-              </div>
-              <div className="space-y-1.5">
-                {templates.map((template) => (
-                  <TemplateCard key={template.id} template={template} />
-                ))}
-              </div>
-            </section>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function EmptyState({
-  allEvents,
-  templates,
-}: {
-  allEvents: Event[]
-  templates: Rundown[]
-}) {
-  return (
-    <div className="text-center py-20">
-      <div className="w-12 h-12 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center mx-auto mb-4">
-        <Layers className="w-5 h-5 text-zinc-600" />
-      </div>
-      <h2 className="text-base font-medium text-white mb-1">Your workspace is empty</h2>
-      <p className="text-sm text-zinc-500 mb-6 max-w-xs mx-auto">
-        Create your first rundown or organise multiple rundowns inside an event folder.
-      </p>
-      <div className="flex items-center justify-center gap-3">
         <CreateEventDialog />
         <CreateRundownDialog events={allEvents} templates={templates} />
+        <UserMenu email={user.email ?? ''} fullName={profile?.full_name ?? null} />
+      </header>
+
+      <div className="max-w-[1080px] mx-auto px-6 py-9">
+        <DashboardTabs
+          allEvents={allEvents}
+          rundownsByEvent={rundownsByEvent}
+          standaloneRundowns={standaloneRundowns}
+          templates={templates}
+          summary={summary}
+        />
       </div>
     </div>
   )

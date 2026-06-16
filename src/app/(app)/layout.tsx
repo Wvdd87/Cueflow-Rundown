@@ -8,7 +8,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (!user) redirect('/login')
 
   return (
-    <div className="h-screen bg-zinc-950 text-white flex flex-col overflow-hidden">
+    <div className="h-screen bg-[#09090d] text-[#c8c9d0] flex flex-col overflow-hidden">
       <main className="flex-1 overflow-y-auto">
         {children}
       </main>
