@@ -33,15 +33,40 @@ export function stripHtml(html: string | null | undefined): string {
 
 /** Resolve a cell's stored value to plain text for exports.
  *  Dropdown cells become a comma-joined option list; rich-text cells have their
- *  $-variable chips resolved to current values before tags are stripped. */
+ *  $-variable and @-mention chips resolved to current values before tags are
+ *  stripped. */
 export function cellToPlainText(
   raw: string | null | undefined,
   variableMap: Record<string, string>,
   colType: string,
+  mentionNameById: Record<string, string> = {},
 ): string {
   if (!raw) return ''
   if (colType === 'dropdown') return parseDropdownValues(raw).join(', ')
-  return stripHtml(resolveVariablesHtml(raw, variableMap))
+  return stripHtml(resolveMentionsHtml(resolveVariablesHtml(raw, variableMap), mentionNameById))
+}
+
+/** Replace the visible text of @-mention chips with the mention's current name,
+ *  so renaming a mention updates every instance. Unknown ids are left as-is. */
+export function resolveMentionsHtml(
+  html: string,
+  mentionNameById: Record<string, string>
+): string {
+  return html.replace(
+    /<span([^>]*?)data-mention-suggestion-char="@"([^>]*?)>([\s\S]*?)<\/span>/g,
+    (full, pre: string, post: string) => {
+      const attrs = pre + post
+      const idMatch = attrs.match(/data-id="([^"]*)"/)
+      const id = idMatch ? idMatch[1] : ''
+      const name = mentionNameById[id]
+      if (name == null) return full
+      const safe = `@${name}`
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+      return `<span${pre}data-mention-suggestion-char="@"${post}>${safe}</span>`
+    }
+  )
 }
 
 /** Replace $-variable chips in stored cell HTML with their current values.

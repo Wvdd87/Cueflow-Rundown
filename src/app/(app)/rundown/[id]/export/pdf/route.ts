@@ -3,7 +3,7 @@ import { renderToBuffer } from '@react-pdf/renderer'
 import { createClient } from '@/lib/supabase/server'
 import { buildExportRows } from '@/lib/rundownExport'
 import { RundownPdf } from '@/lib/RundownPdf'
-import type { Rundown, Column, Cue, Cell, Variable } from '@/lib/supabase/types'
+import type { Rundown, Column, Cue, Cell, Variable, Mention } from '@/lib/supabase/types'
 
 export const runtime = 'nodejs'
 
@@ -26,14 +26,16 @@ export async function GET(
   if (!rundownData) return new Response('Not found', { status: 404 })
   const rundown = rundownData as Rundown
 
-  const [{ data: cuesData }, { data: colsData }, { data: varsData }] = await Promise.all([
+  const [{ data: cuesData }, { data: colsData }, { data: varsData }, { data: mentionsData }] = await Promise.all([
     supabase.from('cues').select('*').eq('rundown_id', id).order('position'),
     supabase.from('columns').select('*').eq('rundown_id', id).order('position'),
     supabase.from('variables').select('*').eq('rundown_id', id),
+    supabase.from('mentions').select('*').eq('rundown_id', id),
   ])
   const cues = (cuesData ?? []) as Cue[]
   const columns = (colsData ?? []) as Column[]
   const variables = (varsData ?? []) as Variable[]
+  const mentions = (mentionsData ?? []) as Mention[]
 
   let cells: Cell[] = []
   if (cues.length > 0) {
@@ -44,7 +46,7 @@ export async function GET(
     cells = (cellData ?? []) as Cell[]
   }
 
-  const rows = buildExportRows(columns, cues, cells, variables)
+  const rows = buildExportRows(columns, cues, cells, variables, mentions)
   const buffer = await renderToBuffer(
     createElement(RundownPdf, {
       title: rundown.name,

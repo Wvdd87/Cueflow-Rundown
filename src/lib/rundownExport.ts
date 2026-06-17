@@ -6,7 +6,7 @@ import {
   type CueTimingOutput,
 } from '@/lib/timing'
 import { cellToPlainText, stripHtml } from '@/lib/cellHtml'
-import type { Cue, Column, Cell, Variable } from '@/lib/supabase/types'
+import type { Cue, Column, Cell, Variable, Mention } from '@/lib/supabase/types'
 
 export { stripHtml }
 
@@ -26,7 +26,8 @@ function rowFor(
   timedMap: Record<string, CueTimingOutput>,
   columns: Column[],
   cellMap: Record<string, string>,
-  varMap: Record<string, string>
+  varMap: Record<string, string>,
+  mentionNameById: Record<string, string>
 ): ExportRow {
   const t = timedMap[cue.id]
   return {
@@ -37,7 +38,7 @@ function rowFor(
     title: cue.title || '',
     subtitle: cue.subtitle || '',
     cells: columns.map((col) =>
-      cellToPlainText(cellMap[`${cue.id}:${col.id}`], varMap, col.col_type)
+      cellToPlainText(cellMap[`${cue.id}:${col.id}`], varMap, col.col_type, mentionNameById)
     ),
   }
 }
@@ -47,13 +48,17 @@ export function buildExportRows(
   columns: Column[],
   cues: Cue[],
   cells: Cell[],
-  variables: Variable[] = []
+  variables: Variable[] = [],
+  mentions: Mention[] = []
 ): ExportRow[] {
   const cellMap: Record<string, string> = Object.fromEntries(
     cells.map((c) => [`${c.cue_id}:${c.column_id}`, c.content ?? ''])
   )
   const varMap: Record<string, string> = Object.fromEntries(
     variables.map((v) => [v.key, v.value])
+  )
+  const mentionNameById: Record<string, string> = Object.fromEntries(
+    mentions.map((m) => [m.id, m.name])
   )
   const layout = buildCueLayout(cues)
   const timed = calculateTimings(layout.docOrder)
@@ -78,10 +83,10 @@ export function buildExportRows(
         cells: columns.map(() => ''),
       })
       for (const ch of item.children) {
-        rows.push(rowFor(ch, layout.numberOf[ch.id] ?? '', timedMap, columns, cellMap, varMap))
+        rows.push(rowFor(ch, layout.numberOf[ch.id] ?? '', timedMap, columns, cellMap, varMap, mentionNameById))
       }
     } else {
-      rows.push(rowFor(item.cue, item.number, timedMap, columns, cellMap, varMap))
+      rows.push(rowFor(item.cue, item.number, timedMap, columns, cellMap, varMap, mentionNameById))
     }
   }
   return rows

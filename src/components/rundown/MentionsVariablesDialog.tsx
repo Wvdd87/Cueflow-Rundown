@@ -1,16 +1,16 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { AtSign, DollarSign, Trash2, Plus } from 'lucide-react'
+import { AtSign, DollarSign, Trash2, Plus, Pencil, Check, X } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { FIELD, BTN_PRIMARY, TAB, TAB_ON, TAB_OFF, ROW_TILE } from './dialogStyles'
+import { FIELD, BTN_PRIMARY, BTN_SECONDARY, TAB, TAB_ON, TAB_OFF, ROW_TILE } from './dialogStyles'
 import { useRundownData } from './RundownDataContext'
-import { addMention, deleteMention } from '@/app/actions/mentions'
+import { addMention, updateMention, deleteMention } from '@/app/actions/mentions'
 import {
   addVariable,
   updateVariable,
@@ -47,6 +47,12 @@ export function MentionsVariablesDialog({
   const [mDesc, setMDesc] = useState('')
   const [savingM, setSavingM] = useState(false)
 
+  // Inline editing of an existing mention
+  const [editId, setEditId] = useState<string | null>(null)
+  const [editName, setEditName] = useState('')
+  const [editDesc, setEditDesc] = useState('')
+  const [savingEdit, setSavingEdit] = useState(false)
+
   const [vKey, setVKey] = useState('')
   const [vValue, setVValue] = useState('')
   const [savingV, setSavingV] = useState(false)
@@ -65,7 +71,34 @@ export function MentionsVariablesDialog({
     }
   }
 
+  function startEditMention(m: Mention) {
+    setEditId(m.id)
+    setEditName(m.name)
+    setEditDesc(m.description ?? '')
+  }
+
+  function cancelEditMention() {
+    setEditId(null)
+    setEditName('')
+    setEditDesc('')
+  }
+
+  async function handleSaveMentionEdit(id: string) {
+    const name = editName.trim()
+    if (!name) return toast.error('Name is required')
+    const description = editDesc.trim() || null
+    setSavingEdit(true)
+    const res = await updateMention(id, rundownId, { name, description })
+    setSavingEdit(false)
+    if (res.error) return toast.error(res.error)
+    setMentions((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, name, description } : m)).sort(byName)
+    )
+    cancelEditMention()
+  }
+
   async function handleDeleteMention(id: string) {
+    if (editId === id) cancelEditMention()
     setMentions((prev) => prev.filter((m) => m.id !== id))
     const res = await deleteMention(id, rundownId)
     if (res.error) toast.error(res.error)
@@ -133,23 +166,68 @@ export function MentionsVariablesDialog({
               {mentions.length === 0 && (
                 <p className="text-sm text-[#5a5c66] italic py-2">No mentions yet</p>
               )}
-              {mentions.map((m) => (
-                <div key={m.id} className={cn('group flex items-start gap-2', ROW_TILE)}>
-                  <span className="text-[#5aa0e6] text-sm mt-0.5">@</span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-[#eef0f3] truncate">{m.name}</p>
-                    {m.description && (
-                      <p className="text-xs text-[#888b96] truncate">{m.description}</p>
-                    )}
+              {mentions.map((m) =>
+                editId === m.id ? (
+                  <div key={m.id} className={cn('flex flex-col gap-2', ROW_TILE)}>
+                    <input
+                      data-testid="edit-mention-name"
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      placeholder="Name"
+                      autoFocus
+                      className={FIELD}
+                      onKeyDown={(e) => { if (e.key === 'Escape') cancelEditMention() }}
+                    />
+                    <textarea
+                      data-testid="edit-mention-desc"
+                      value={editDesc}
+                      onChange={(e) => setEditDesc(e.target.value)}
+                      rows={2}
+                      placeholder="Description (optional)"
+                      className={cn(FIELD, 'resize-none')}
+                      onKeyDown={(e) => { if (e.key === 'Escape') cancelEditMention() }}
+                    />
+                    <div className="flex justify-end gap-2">
+                      <button onClick={cancelEditMention} className={cn(BTN_SECONDARY, 'px-3 py-1.5')}>
+                        <X className="w-3.5 h-3.5" /> Cancel
+                      </button>
+                      <button
+                        data-testid="save-mention-edit"
+                        onClick={() => handleSaveMentionEdit(m.id)}
+                        disabled={savingEdit || !editName.trim()}
+                        className={cn(BTN_PRIMARY, 'px-3 py-1.5')}
+                      >
+                        <Check className="w-3.5 h-3.5" /> Save
+                      </button>
+                    </div>
                   </div>
-                  <button
-                    onClick={() => handleDeleteMention(m.id)}
-                    className="opacity-0 group-hover:opacity-100 text-[#5a5c66] hover:text-[#ff5a73] transition-all"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              ))}
+                ) : (
+                  <div key={m.id} className={cn('group flex items-start gap-2', ROW_TILE)}>
+                    <span className="text-[#5aa0e6] text-sm mt-0.5">@</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-[#eef0f3] truncate">{m.name}</p>
+                      {m.description && (
+                        <p className="text-xs text-[#888b96] truncate">{m.description}</p>
+                      )}
+                    </div>
+                    <button
+                      data-testid="edit-mention-btn"
+                      onClick={() => startEditMention(m)}
+                      title="Edit mention"
+                      className="opacity-0 group-hover:opacity-100 text-[#5a5c66] hover:text-[#c8c9d0] transition-all"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteMention(m.id)}
+                      title="Delete mention"
+                      className="opacity-0 group-hover:opacity-100 text-[#5a5c66] hover:text-[#ff5a73] transition-all"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )
+              )}
             </div>
 
             <div className="space-y-2 border-t border-[#1d1d24] pt-3">

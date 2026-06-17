@@ -21,6 +21,7 @@ import {
   RemoveFormatting,
 } from 'lucide-react'
 import { upsertCell } from '@/app/actions/cues'
+import { resolveMentionsHtml } from '@/lib/cellHtml'
 import { useRundownData } from './RundownDataContext'
 import { buildMentionExtension } from './cellExtensions'
 import { FileAttachment } from './fileAttachment'
@@ -152,10 +153,12 @@ function CellDisplay({
     null
   )
 
-  const resolvedHtml = useMemo(
-    () => resolveVariables(html, variableMap),
-    [html, variableMap]
-  )
+  const resolvedHtml = useMemo(() => {
+    const nameById = Object.fromEntries(
+      Object.entries(mentionMap).map(([id, m]) => [id, m.name])
+    )
+    return resolveMentionsHtml(resolveVariables(html, variableMap), nameById)
+  }, [html, variableMap, mentionMap])
 
   function handleMouseOver(e: React.MouseEvent) {
     const el = (e.target as HTMLElement).closest?.(

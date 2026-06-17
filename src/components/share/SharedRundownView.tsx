@@ -10,7 +10,7 @@ import {
   formatDuration,
   type CueTimingOutput,
 } from '@/lib/timing'
-import { resolveVariablesHtml, parseDropdownValues } from '@/lib/cellHtml'
+import { resolveVariablesHtml, resolveMentionsHtml, parseDropdownValues } from '@/lib/cellHtml'
 import { CF, textOn } from '@/components/rundown/layout'
 import { RichNoteCell } from '@/components/rundown/RichNoteCell'
 import { RundownSearch, type SearchCue } from '@/components/rundown/RundownSearch'
@@ -752,7 +752,10 @@ function DropdownDisplay({ values, optionColors }: { values: string[]; optionCol
 // ── Rich-text display with variable resolution + mention hovercards ───────────
 function SharedRichText({ html, varMap, mentionMap }: { html: string; varMap: Record<string, string>; mentionMap: Record<string, Mention> }) {
   const [hover, setHover] = useState<{ mention: Mention; x: number; y: number } | null>(null)
-  const resolved = useMemo(() => resolveVariablesHtml(html, varMap), [html, varMap])
+  const resolved = useMemo(() => {
+    const nameById = Object.fromEntries(Object.entries(mentionMap).map(([id, m]) => [id, m.name]))
+    return resolveMentionsHtml(resolveVariablesHtml(html, varMap), nameById)
+  }, [html, varMap, mentionMap])
 
   if (!html || html === '<p></p>') return null
 
