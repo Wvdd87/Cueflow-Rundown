@@ -123,25 +123,6 @@ export function CueRow({
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: cue.id })
   const rowRef = useRef<HTMLDivElement>(null)
-  const progressBarRef = useRef<HTMLDivElement>(null)
-
-  // Drive the progress bar at 60 fps via rAF to avoid the 200 ms tick stutter
-  useEffect(() => {
-    if (!isActive || !liveGetElapsedMs || cue.duration_ms <= 0) return
-    let rafId: number
-    function frame() {
-      if (progressBarRef.current) {
-        const elapsed = liveGetElapsedMs!()
-        const pct = Math.min(100, (elapsed / cue.duration_ms) * 100)
-        progressBarRef.current.style.width = `${pct}%`
-        progressBarRef.current.style.backgroundColor =
-          elapsed > cue.duration_ms ? '#ff2848' : '#f0a838'
-      }
-      rafId = requestAnimationFrame(frame)
-    }
-    rafId = requestAnimationFrame(frame)
-    return () => cancelAnimationFrame(rafId)
-  }, [isActive, liveGetElapsedMs, cue.duration_ms])
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -563,16 +544,6 @@ export function CueRow({
             )
           })
         })()}
-
-        {/* Live progress bar — sits in the gap below the active cue (rAF-driven) */}
-        {isActive && cue.duration_ms > 0 && (
-          <div
-            className="absolute pointer-events-none"
-            style={{ left: labelIndent, right: CF.rowPad, bottom: -5, height: 3, background: 'rgba(255,255,255,0.10)', zIndex: 15 }}
-          >
-            <div ref={progressBarRef} className="h-full" style={{ width: '0%' }} />
-          </div>
-        )}
       </div>
     </div>
   )

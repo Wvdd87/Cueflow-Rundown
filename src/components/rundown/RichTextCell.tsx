@@ -160,30 +160,33 @@ function CellDisplay({
     return resolveMentionsHtml(resolveVariables(html, variableMap), nameById)
   }, [html, variableMap, mentionMap])
 
-  function handleMouseOver(e: React.MouseEvent) {
-    const el = (e.target as HTMLElement).closest?.(
-      '[data-mention-suggestion-char="@"]'
-    )
-    if (!el) return
+  // Show the hovercard when the pointer is over a mention; clear it whenever
+  // it's over anything else. Container onMouseLeave + scroll are the reliable
+  // dismissals (a single mouseout can land on a non-mention and get stuck).
+  function handleMouseMove(e: React.MouseEvent) {
+    const el = (e.target as HTMLElement).closest?.('[data-mention-suggestion-char="@"]')
+    if (!el) return setHover((p) => (p ? null : p))
     const mention = mentionMap[el.getAttribute('data-id') || '']
-    if (!mention) return
+    if (!mention) return setHover((p) => (p ? null : p))
     const r = el.getBoundingClientRect()
-    setHover({ mention, x: r.left, y: r.bottom })
+    setHover((p) => (p && p.mention.id === mention.id ? p : { mention, x: r.left, y: r.bottom }))
   }
 
-  function handleMouseOut(e: React.MouseEvent) {
-    if ((e.target as HTMLElement).closest?.('[data-mention-suggestion-char="@"]')) {
-      setHover(null)
-    }
-  }
+  useEffect(() => {
+    if (!hover) return
+    const clear = () => setHover(null)
+    window.addEventListener('scroll', clear, true)
+    return () => window.removeEventListener('scroll', clear, true)
+  }, [hover])
 
   return (
     <>
       <div
         data-testid="richtext-cell"
         onClick={onClick}
-        onMouseOver={handleMouseOver}
-        onMouseOut={handleMouseOut}
+        onMouseOver={handleMouseMove}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={() => setHover(null)}
         className="tiptap-cell w-full min-h-[28px] px-2 py-1 text-sm text-[#c8c9d0] cursor-text hover:bg-[#1d1d24]/40 break-words"
         dangerouslySetInnerHTML={{ __html: resolvedHtml }}
       />
@@ -192,16 +195,16 @@ function CellDisplay({
         createPortal(
           <div
             style={{ position: 'fixed', left: hover.x, top: hover.y + 6, zIndex: 70 }}
-            className="max-w-xs rounded-md border border-zinc-700 bg-zinc-900 p-3 shadow-xl pointer-events-none"
+            className="max-w-xs border border-[#2e2e38] bg-[#111116] p-3 shadow-[0_18px_50px_rgba(0,0,0,0.8)] pointer-events-none"
           >
-            <p className="text-sm font-medium text-white mb-1">{hover.mention.name}</p>
+            <p className="text-sm font-medium text-[#eef0f3] mb-1">{hover.mention.name}</p>
             {hover.mention.description ? (
               <div
-                className="tiptap-cell text-xs text-zinc-300"
+                className="tiptap-cell text-xs text-[#c8c9d0]"
                 dangerouslySetInnerHTML={{ __html: hover.mention.description }}
               />
             ) : (
-              <p className="text-xs text-zinc-500 italic">No description</p>
+              <p className="text-xs text-[#5a5c66] italic">No description</p>
             )}
           </div>,
           document.body

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { ChevronUp } from 'lucide-react'
 import {
   DropdownMenu,
@@ -51,10 +51,33 @@ export function TransportBar({ live, cues }: TransportBarProps) {
   const overUnder = live.overUnderMs
   const onTime = Math.abs(overUnder) < 1000
 
+  // Current-cue progress bar, driven at 60fps via rAF + a DOM ref (constant
+  // width in JSX so React's 200ms ticks don't clobber the smooth value).
+  const progressRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const bar = progressRef.current
+    if (!bar) return
+    const paint = () => {
+      const d = live.activeDurationMs
+      const el = live.getElapsedMs()
+      bar.style.width = d > 0 ? `${Math.min(100, (el / d) * 100)}%` : '0%'
+      bar.style.background = d > 0 && el > d ? '#ff2848' : '#f0a838'
+    }
+    if (live.status === 'running') {
+      let rafId = 0
+      const loop = () => { paint(); rafId = requestAnimationFrame(loop) }
+      rafId = requestAnimationFrame(loop)
+      return () => cancelAnimationFrame(rafId)
+    }
+    paint() // paused — freeze at the current position
+  }, [live.status, live.activeCueId, live.activeDurationMs, live.getElapsedMs])
+
   return (
     <div className="relative shrink-0 flex items-center gap-4 h-[60px] bg-[#0d0d12] border-b border-[#22222a] px-[18px]">
-      {/* Amber underline (UI-kit navbar signature) */}
-      <div className="absolute left-0 right-0 -bottom-px h-0.5 bg-[#f0a838] opacity-60 pointer-events-none" />
+      {/* Current-cue progress bar — sits right under the control bar */}
+      <div className="absolute left-0 right-0 -bottom-px h-[3px] bg-[rgba(255,255,255,0.08)] pointer-events-none">
+        <div ref={progressRef} data-testid="live-progress" className="h-full" style={{ width: '0%', background: '#f0a838' }} />
+      </div>
 
       {/* Hero remaining countdown — aligned with the cue-number column */}
       <div className="flex items-center gap-3 flex-1 min-w-0 pl-12">

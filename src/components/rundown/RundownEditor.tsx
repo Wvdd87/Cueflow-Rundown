@@ -512,11 +512,18 @@ export function RundownEditor({
   }, [rundown.id, refreshCues])
 
   const handleAddCueAt = useCallback(async (id: string, direction: 'above' | 'below') => {
-    const target = cuesRef.current.find((c) => c.id === id)
-    if (!target) return
-    const afterPosition = direction === 'above' ? target.position - 1 : target.position
-    const r = await addCue(rundown.id, afterPosition)
-    if (r.error) { toast.error(r.error); return }
+    const sorted = [...cuesRef.current].sort((a, b) => a.position - b.position)
+    const idx = sorted.findIndex((c) => c.id === id)
+    if (idx < 0) return
+    // Create the cue (lands at the end), then renumber every cue to the exact
+    // desired order — robust against the shift_cue_positions RPC's off-by-one
+    // and keeps positions contiguous (no ties).
+    const r = await addCue(rundown.id, sorted.length)
+    if (r.error || !r.cue) { toast.error(r.error ?? 'Failed to add cue'); await refreshCues(); return }
+    const newId = r.cue.id
+    const orderIds = sorted.map((c) => c.id)
+    orderIds.splice(direction === 'above' ? idx : idx + 1, 0, newId)
+    await reorderCues(rundown.id, orderIds)
     await refreshCues()
   }, [rundown.id, refreshCues])
 

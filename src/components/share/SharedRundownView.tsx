@@ -381,6 +381,9 @@ export function SharedRundownView({
         </div>
       </header>
 
+      {/* Current-cue progress bar — right under the header (mirrors the editor) */}
+      {isLive && <ShareLiveProgress live={live} />}
+
       <div ref={scrollRef} data-cue-scroll className="flex-1 overflow-auto">
         <div className="inline-block min-w-full align-top">
           {/* Column headers — sticky, scrolls horizontally with rows */}
@@ -581,29 +584,6 @@ function ShareCueRow({
   const numColor = isActive ? '#fff' : isNext ? '#eef0f3' : (cue.background_color ? ct.num : '#9ba0ab')
   const remColor = remaining == null ? '#eef0f3' : remaining < 0 ? '#ff2848' : remaining <= 30000 ? '#f0a838' : '#18d986'
 
-  // Drive the progress bar at 60fps via rAF + a DOM ref so it moves smoothly
-  // between operator snapshots (instead of stepping with React's 200ms ticks).
-  const progressBarRef = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    const bar = progressBarRef.current
-    if (!bar || !isActive || cue.duration_ms <= 0) return
-    const dur = cue.duration_ms
-    const paint = (el: number) => {
-      bar.style.width = `${Math.min(100, (el / dur) * 100)}%`
-      bar.style.background = el > dur ? '#ff2848' : '#f0a838'
-    }
-    if (live.status === 'running') {
-      let rafId = 0
-      const loop = () => {
-        paint(live.elapsedMs + (Date.now() - live.sentAt))
-        rafId = requestAnimationFrame(loop)
-      }
-      rafId = requestAnimationFrame(loop)
-      return () => cancelAnimationFrame(rafId)
-    }
-    paint(live.elapsedMs) // paused — freeze at the current position
-  }, [isActive, live.status, live.elapsedMs, live.sentAt, cue.duration_ms])
-
   return (
     <div ref={activeRef} data-cue-id={cue.id} style={{ marginBottom: CF.gap }}>
       {/* Current / Next label */}
@@ -666,15 +646,34 @@ function ShareCueRow({
         <div data-share-notes-col style={tile(notesWidth, '#16161c', { padding: '10px 4px' })}>
           <RichNoteCell value={note} onSave={(html) => onNoteChange(cue.id, html)} />
         </div>
-
-        {/* Live progress bar (width owned by the rAF loop above; constant style
-            here so React never overwrites the smooth value) */}
-        {isActive && cue.duration_ms > 0 && (
-          <div className="absolute pointer-events-none" style={{ left: labelIndent, right: CF.rowPad, bottom: -5, height: 3, background: 'rgba(255,255,255,0.10)', zIndex: 15 }}>
-            <div ref={progressBarRef} className="h-full" style={{ width: '0%', background: '#f0a838' }} />
-          </div>
-        )}
       </div>
+    </div>
+  )
+}
+
+// ── Shared live progress bar (sits under the header, mirrors the editor) ──────
+function ShareLiveProgress({ live }: { live: LiveSyncState }) {
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const bar = ref.current
+    if (!bar) return
+    const paint = (el: number) => {
+      const d = live.durationMs
+      bar.style.width = d > 0 ? `${Math.min(100, (el / d) * 100)}%` : '0%'
+      bar.style.background = d > 0 && el > d ? '#ff2848' : '#f0a838'
+    }
+    if (live.status === 'running') {
+      let rafId = 0
+      const loop = () => { paint(live.elapsedMs + (Date.now() - live.sentAt)); rafId = requestAnimationFrame(loop) }
+      rafId = requestAnimationFrame(loop)
+      return () => cancelAnimationFrame(rafId)
+    }
+    paint(live.elapsedMs) // paused — freeze at the current position
+  }, [live.status, live.elapsedMs, live.sentAt, live.durationMs])
+
+  return (
+    <div className="shrink-0 h-[3px] bg-[rgba(255,255,255,0.08)]">
+      <div ref={ref} data-testid="live-progress" className="h-full" style={{ width: '0%', background: '#f0a838' }} />
     </div>
   )
 }
@@ -757,26 +756,31 @@ function SharedRichText({ html, varMap, mentionMap }: { html: string; varMap: Re
     return resolveMentionsHtml(resolveVariablesHtml(html, varMap), nameById)
   }, [html, varMap, mentionMap])
 
+  useEffect(() => {
+    if (!hover) return
+    const clear = () => setHover(null)
+    window.addEventListener('scroll', clear, true)
+    return () => window.removeEventListener('scroll', clear, true)
+  }, [hover])
+
   if (!html || html === '<p></p>') return null
 
-  function onOver(e: React.MouseEvent) {
+  function onMove(e: React.MouseEvent) {
     const el = (e.target as HTMLElement).closest?.('[data-mention-suggestion-char="@"]')
-    if (!el) return
+    if (!el) return setHover((p) => (p ? null : p))
     const mention = mentionMap[el.getAttribute('data-id') || '']
-    if (!mention) return
+    if (!mention) return setHover((p) => (p ? null : p))
     const r = el.getBoundingClientRect()
-    setHover({ mention, x: r.left, y: r.bottom })
-  }
-  function onOut(e: React.MouseEvent) {
-    if ((e.target as HTMLElement).closest?.('[data-mention-suggestion-char="@"]')) setHover(null)
+    setHover((p) => (p && p.mention.id === mention.id ? p : { mention, x: r.left, y: r.bottom }))
   }
 
   return (
     <>
       <div
         className="tiptap-cell text-[13px] text-[#c8c9d0] break-words [overflow-wrap:anywhere] w-full"
-        onMouseOver={onOver}
-        onMouseOut={onOut}
+        onMouseOver={onMove}
+        onMouseMove={onMove}
+        onMouseLeave={() => setHover(null)}
         dangerouslySetInnerHTML={{ __html: resolved }}
       />
       {hover && typeof document !== 'undefined' && createPortal(
