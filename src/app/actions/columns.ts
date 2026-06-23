@@ -137,17 +137,19 @@ export async function getTrashedColumns(rundownId: string): Promise<Column[]> {
 export async function reorderColumns(rundownId: string, orderedIds: string[]) {
   const { supabase } = await getRundownAccess(rundownId)
 
-  const updates = orderedIds.map((id, index) => ({
-    id,
-    position: index,
-    rundown_id: rundownId,
-  }))
-
-  const { error } = await supabase
-    .from('columns')
-    .upsert(updates as never, { onConflict: 'id' })
-
-  if (error) return { error: error.message }
+  // Update positions in place — an upsert would run an INSERT, which requires
+  // the NOT-NULL `name` column (no default) and fails even for existing rows.
+  const results = await Promise.all(
+    orderedIds.map((id, index) =>
+      supabase
+        .from('columns')
+        .update({ position: index } as never)
+        .eq('id', id)
+        .eq('rundown_id', rundownId)
+    )
+  )
+  const failed = results.find((r) => r.error)
+  if (failed?.error) return { error: failed.error.message }
 
   revalidatePath(`/rundown/${rundownId}`)
   return { success: true }
