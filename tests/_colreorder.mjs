@@ -11,13 +11,7 @@ async function addColumn(name){
   await p.getByTestId('add-column-btn').click(); await p.waitForTimeout(300)
   await p.getByTestId('column-name').fill(name); await p.getByTestId('add-column-submit').click(); await p.waitForTimeout(700)
 }
-const colOrder = async ()=> p.evaluate(()=>{
-  // read the dynamic column header names (font-cond uppercase labels in the sticky header)
-  const heads=[...document.querySelectorAll('[data-cue-scroll] .sticky, [data-cue-scroll]')]
-  // fallback: collect header label texts
-  const labels=[...document.querySelectorAll('span')].map(s=>s.textContent?.trim()).filter(Boolean)
-  return labels.filter(t=>t==='Col1'||t==='Col2')
-})
+const colOrder = async ()=> p.evaluate(()=>[...document.querySelectorAll('span')].map(s=>s.textContent?.trim()).filter(t=>t==='Col1'||t==='Col2'))
 try{
   await p.goto(`${BASE}/signup`,{waitUntil:'networkidle'})
   await p.fill('input[name="full_name"]','Cr'); await p.fill('input[name="email"]',EMAIL); await p.fill('input[name="password"]',PW)
@@ -28,26 +22,27 @@ try{
   await p.getByRole('button',{name:/add first cue/i}).first().click(); await p.waitForTimeout(600)
   await addColumn('Col1'); await addColumn('Col2')
   console.log('before:', JSON.stringify(await colOrder()))
-  // drag Col1 header onto Col2 to reorder
-  const c1 = await p.getByText('Col1',{exact:true}).first().boundingBox()
-  const c2 = await p.getByText('Col2',{exact:true}).first().boundingBox()
-  if(c1&&c2){
-    await p.mouse.move(c1.x+6, c1.y+c1.height/2); await p.mouse.down()
-    await p.mouse.move(c1.x+20, c1.y+c1.height/2, {steps:4}); await p.waitForTimeout(120)
-    await p.mouse.move(c2.x+c2.width/2, c2.y+c2.height/2, {steps:8}); await p.waitForTimeout(150)
-    await p.mouse.up(); await p.waitForTimeout(1000)
-  } else warn('could not find Col1/Col2 headers')
-  // check for the error toast
+  const pos = await p.evaluate(()=>{
+    const head=(name)=>{ const s=[...document.querySelectorAll('span')].find(x=>x.textContent?.trim()===name); return s?.closest('.group\\/col')||s?.parentElement }
+    const h1=head('Col1'), h2=head('Col2')
+    const grip=h1?.querySelector('[title="Drag to reorder column"]')
+    const g=grip?.getBoundingClientRect(), r2=h2?.getBoundingClientRect()
+    return g&&r2? {gx:g.x+g.width/2, gy:g.y+g.height/2, tx:r2.x+r2.width/2, ty:r2.y+r2.height/2} : null
+  })
+  if(pos){
+    await p.mouse.move(pos.gx, pos.gy); await p.mouse.down()
+    await p.mouse.move(pos.gx+8, pos.gy, {steps:3}); await p.waitForTimeout(120)
+    await p.mouse.move(pos.tx, pos.ty, {steps:10}); await p.waitForTimeout(150)
+    await p.mouse.move(pos.tx+4, pos.ty, {steps:2}); await p.waitForTimeout(120)
+    await p.mouse.up(); await p.waitForTimeout(1200)
+  } else warn('could not locate grip/target')
   const errToast = await p.getByText(/not-null|violates|null value/i).count()
-  errToast===0 ? ok('no not-null constraint error toast after reorder') : warn(`error toast present (count=${errToast})`)
-  const afterDrag = await colOrder()
-  console.log('after drag:', JSON.stringify(afterDrag))
-  // reload → confirm the new order persisted (proves the DB update succeeded)
-  await p.reload({waitUntil:'networkidle'}); await p.waitForTimeout(1200)
-  const afterReload = await colOrder()
-  console.log('after reload:', JSON.stringify(afterReload))
-  if(JSON.stringify(afterReload)===JSON.stringify(['Col2','Col1'])) ok('reorder persisted to DB (Col2 before Col1)')
-  else if(JSON.stringify(afterReload)===JSON.stringify(afterDrag) && JSON.stringify(afterDrag)!==JSON.stringify(['Col1','Col2'])) ok('reorder persisted ('+JSON.stringify(afterReload)+')')
-  else warn('order after reload: '+JSON.stringify(afterReload)+' (drag may not have triggered)')
+  errToast===0 ? ok('no not-null constraint error toast') : warn(`ERROR TOAST present (count=${errToast})`)
+  console.log('after drag:', JSON.stringify(await colOrder()))
+  await p.reload({waitUntil:'networkidle'}); await p.waitForTimeout(1300)
+  const after = await colOrder()
+  console.log('after reload:', JSON.stringify(after))
+  if(JSON.stringify(after)===JSON.stringify(['Col2','Col1'])) ok('reorder PERSISTED to DB (Col2 before Col1)')
+  else warn('order after reload: '+JSON.stringify(after))
 }catch(e){ console.log('SCRIPT ERROR:',e.message) }
 finally{ await b.close() }
