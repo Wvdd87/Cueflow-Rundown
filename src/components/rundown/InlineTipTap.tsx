@@ -69,12 +69,21 @@ export function InlineTipTap({
     onSave(html)
   }, [editor, onSave])
 
-  // Save when clicking outside the wrapper
+  // Save when clicking outside the wrapper.
   useEffect(() => {
     function onDocMouseDown(e: MouseEvent) {
-      if (wrapperRef.current?.contains(e.target as Node)) return
-      const el = e.target as HTMLElement
-      if (el?.closest?.('[data-bubble-toolbar]')) return
+      // Check the composed path, not the live target: clicking a bubble-toolbar
+      // submenu item (e.g. Heading 1) calls setOpenMenu(null), which React 18
+      // flushes synchronously and detaches the clicked button before this runs —
+      // so target.closest() would wrongly read it as an outside click and close
+      // the editor. The path is snapshotted at dispatch and keeps the ancestors.
+      const path = e.composedPath()
+      const inSkipZone = path.some(
+        (n) =>
+          n instanceof HTMLElement &&
+          (n === wrapperRef.current || n.hasAttribute('data-bubble-toolbar'))
+      )
+      if (inSkipZone) return
       save()
     }
     document.addEventListener('mousedown', onDocMouseDown)

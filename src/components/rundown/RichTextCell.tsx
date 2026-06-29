@@ -330,10 +330,22 @@ function CellTipTap({
 
   useEffect(() => {
     function onDocMouseDown(e: MouseEvent) {
-      const target = e.target as Node
-      if (wrapperRef.current && wrapperRef.current.contains(target)) return
-      const el = target as HTMLElement
-      if (el?.closest?.('[data-suggestion-popup], .tippy-box, [data-bubble-toolbar]')) return
+      // Use the event's composed path rather than the live target: clicking a
+      // bubble-toolbar submenu item (e.g. Heading 1) calls setOpenMenu(null),
+      // which React 18 flushes synchronously and detaches the clicked button
+      // before this listener runs — so target.closest() would wrongly report an
+      // "outside" click and save/close the editor. The path is snapshotted at
+      // dispatch and still contains the toolbar/wrapper ancestors.
+      const path = e.composedPath()
+      const inSkipZone = path.some(
+        (n) =>
+          n instanceof HTMLElement &&
+          (n === wrapperRef.current ||
+            n.hasAttribute('data-suggestion-popup') ||
+            n.hasAttribute('data-bubble-toolbar') ||
+            n.classList.contains('tippy-box'))
+      )
+      if (inSkipZone) return
       save()
     }
     document.addEventListener('mousedown', onDocMouseDown)
