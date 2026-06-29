@@ -37,7 +37,7 @@ import {
   TITLE_COL_WIDTH,
   PRIVATE_NOTES_ID,
 } from './layout'
-import { formatDuration, parseDurationInput, formatMsToTime, formatMsToTimeDisplay, parseTimeToMs } from '@/lib/timing'
+import { formatDuration, parseDurationInput, formatMsToTime, formatMsToTimeDisplay, parseClockInput } from '@/lib/timing'
 import { cn, inlineHtml } from '@/lib/utils'
 import type { Cue, Column } from '@/lib/supabase/types'
 import type { CueTimingOutput, TimeDisplay } from '@/lib/timing'
@@ -203,7 +203,8 @@ export function CueRow({
   }
   async function saveStart() {
     setEditingStart(false)
-    const ms = parseTimeToMs(startInput)
+    const ms = parseClockInput(startInput)
+    if (ms === null) return
     const override = formatMsToTime(ms)
     if (override === cue.start_time_override) return
     onUpdate(cue.id, { start_type: 'hard', start_time_override: override })

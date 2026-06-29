@@ -30,21 +30,33 @@ export interface LiveBroadcast {
 /** Operator side: broadcast the live show state (incl. timing) to viewers. */
 export function useBroadcastLive(rundownId: string, live: LiveBroadcast) {
   const channelRef = useRef<RealtimeChannel | null>(null)
+  const subscribedRef = useRef(false)
   const liveRef = useRef(live)
   liveRef.current = live
 
   useEffect(() => {
     const supa = createClient()
     const channel = supa.channel(channelName(rundownId))
-    channel.subscribe()
+    subscribedRef.current = false
+    channel.subscribe((status) => {
+      subscribedRef.current = status === 'SUBSCRIBED'
+      // Flush the latest state the moment the socket joins, so a viewer that
+      // was already connected at go-live gets the current cue immediately.
+      if (subscribedRef.current) send()
+    })
     channelRef.current = channel
     return () => {
+      subscribedRef.current = false
       supa.removeChannel(channel)
       channelRef.current = null
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rundownId])
 
   function send() {
+    // Skip until the channel has actually joined — sending earlier falls back
+    // to an HTTP POST that gets aborted by the go-live re-render (ERR_ABORTED).
+    if (!subscribedRef.current) return
     const l = liveRef.current
     channelRef.current?.send({
       type: 'broadcast',

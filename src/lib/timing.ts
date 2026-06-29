@@ -109,6 +109,29 @@ export function parseDurationInput(raw: string): number | null {
   return null
 }
 
+/**
+ * Parse a wall-clock entry to ms-from-midnight.
+ * Colon-separated input is read left-aligned as "HH:MM:SS" (so "15:30" → 15:30:00).
+ * Pure digits reuse the right-aligned HHMMSS rule from parseDurationInput
+ * ("45" → 0:00:45, "1530" → 0:15:30, "215630" → 21:56:30).
+ * Returns null for invalid/out-of-range input so callers can skip the update.
+ */
+export function parseClockInput(raw: string): number | null {
+  const s = raw.trim()
+  if (!s) return null
+
+  if (s.includes(':')) {
+    const parts = s.split(':').map(Number)
+    if (parts.some(isNaN)) return null
+    const [h = 0, m = 0, sec = 0] = parts
+    if (m >= 60 || sec >= 60) return null
+    return (h * 3600 + m * 60 + sec) * 1000
+  }
+
+  if (!/^\d+$/.test(s)) return null
+  return parseDurationInput(s)
+}
+
 /** Cascade-calculate start times for all cues in order */
 export function calculateTimings(cues: CueTimingInput[]): CueTimingOutput[] {
   const result: CueTimingOutput[] = []
