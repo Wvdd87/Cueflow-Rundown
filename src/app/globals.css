@@ -212,6 +212,49 @@ select option {
 }
 
 /* Rich-text (TipTap) cell content — restore list/mark styling stripped by reset */
+.tiptap-cell h1 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1.3;
+  margin: 0.25rem 0 0.15rem;
+  color: #eef0f3;
+}
+.tiptap-cell h2 {
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.3;
+  margin: 0.2rem 0 0.1rem;
+  color: #eef0f3;
+}
+.tiptap-cell h3 {
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1.3;
+  margin: 0.15rem 0 0.1rem;
+  color: #d0d2db;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.tiptap-cell span[data-hs="1"] {
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1.3;
+  color: #eef0f3;
+}
+.tiptap-cell span[data-hs="2"] {
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.3;
+  color: #eef0f3;
+}
+.tiptap-cell span[data-hs="3"] {
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1.3;
+  color: #d0d2db;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
 .tiptap-cell p {
   margin: 0;
 }

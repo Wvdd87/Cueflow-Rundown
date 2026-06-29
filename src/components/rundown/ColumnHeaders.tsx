@@ -61,6 +61,7 @@ import {
   CF,
   PRIVATE_NOTES_WIDTH,
   PRIVATE_NOTES_ID,
+  TITLE_COL_ID,
   TITLE_COL_WIDTH,
   totalRowWidth,
 } from './layout'
@@ -87,14 +88,23 @@ interface ColumnHeadersProps {
   onUnhideAll: () => void
   privateNotesIndex: number
   onPrivateNotesIndexChange: (idx: number) => void
+  titleIndex: number
+  onTitleIndexChange: (idx: number) => void
   titleWidth: number
   onTitleWidthChange: (w: number) => void
+  privateNotesWidth: number
+  onPrivateNotesWidthChange: (w: number) => void
 }
 
-function buildMergedIds(cols: Column[], pnIdx: number): string[] {
+// Build a merged list of [col ids, TITLE_COL_ID, PRIVATE_NOTES_ID] for DnD.
+// titleIdx and pnIdx are both relative to the number of real column IDs.
+function buildMergedIds(cols: Column[], titleIdx: number, pnIdx: number): string[] {
   const ids = cols.map((c) => c.id)
-  const insertAt = Math.min(Math.max(0, pnIdx), ids.length)
-  ids.splice(insertAt, 0, PRIVATE_NOTES_ID)
+  const titleInsert = Math.min(Math.max(0, titleIdx), ids.length)
+  ids.splice(titleInsert, 0, TITLE_COL_ID)
+  // pnIdx is relative to cols only; in the merged array (after title insert) add 1 if pnIdx >= titleIdx
+  const pnInsert = Math.min(Math.max(0, pnIdx + (pnIdx >= titleIdx ? 1 : 0)), ids.length)
+  ids.splice(pnInsert, 0, PRIVATE_NOTES_ID)
   return ids
 }
 
@@ -118,8 +128,12 @@ export function ColumnHeaders({
   onUnhideAll,
   privateNotesIndex,
   onPrivateNotesIndexChange,
+  titleIndex,
+  onTitleIndexChange,
   titleWidth,
   onTitleWidthChange,
+  privateNotesWidth,
+  onPrivateNotesWidthChange,
 }: ColumnHeadersProps) {
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
@@ -137,7 +151,7 @@ export function ColumnHeaders({
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } })
   )
 
-  const rowWidth = totalRowWidth(titleWidth, visibleColumns.map((c) => c.width))
+  const rowWidth = totalRowWidth(titleWidth, visibleColumns.map((c) => c.width), privateNotesWidth)
   const hiddenColumns = columns.filter((c) => !visibleColumns.some((v) => v.id === c.id))
 
   async function handleAddColumn() {
@@ -191,11 +205,21 @@ export function ColumnHeaders({
     }
   }
 
+  function lockScroll() {
+    const el = document.querySelector('[data-cue-scroll]') as HTMLElement | null
+    if (el) el.style.overflow = 'hidden'
+  }
+  function unlockScroll() {
+    const el = document.querySelector('[data-cue-scroll]') as HTMLElement | null
+    if (el) el.style.overflow = ''
+  }
+
   // --- Resize dynamic columns ---
   const resizeRef = useRef<{ id: string; width: number } | null>(null)
   function startResize(e: React.MouseEvent, col: Column) {
     e.preventDefault()
     e.stopPropagation()
+    lockScroll()
     const startX = e.clientX
     const startW = col.width
     function onMove(ev: MouseEvent) {
@@ -204,6 +228,7 @@ export function ColumnHeaders({
       onColumnsChange(columns.map((c) => (c.id === col.id ? { ...c, width } : c)))
     }
     function onUp() {
+      unlockScroll()
       document.removeEventListener('mousemove', onMove)
       document.removeEventListener('mouseup', onUp)
       const r = resizeRef.current
@@ -217,12 +242,32 @@ export function ColumnHeaders({
   function startTitleResize(e: React.MouseEvent) {
     e.preventDefault()
     e.stopPropagation()
+    lockScroll()
     const startX = e.clientX
     const startW = titleWidth
     function onMove(ev: MouseEvent) {
       onTitleWidthChange(Math.max(MIN_COL_WIDTH, startW + (ev.clientX - startX)))
     }
     function onUp() {
+      unlockScroll()
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  }
+
+  function startPrivateNotesResize(e: React.MouseEvent) {
+    e.preventDefault()
+    e.stopPropagation()
+    lockScroll()
+    const startX = e.clientX
+    const startW = privateNotesWidth
+    function onMove(ev: MouseEvent) {
+      onPrivateNotesWidthChange(Math.max(MIN_COL_WIDTH, startW + (ev.clientX - startX)))
+    }
+    function onUp() {
+      unlockScroll()
       document.removeEventListener('mousemove', onMove)
       document.removeEventListener('mouseup', onUp)
     }
@@ -233,14 +278,23 @@ export function ColumnHeaders({
   async function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event
     if (!over || active.id === over.id) return
-    const mergedIds = buildMergedIds(visibleColumns, privateNotesIndex)
+    const mergedIds = buildMergedIds(visibleColumns, titleIndex, privateNotesIndex)
     const oldIdx = mergedIds.indexOf(active.id as string)
     const newIdx = mergedIds.indexOf(over.id as string)
     if (oldIdx < 0 || newIdx < 0) return
     const newMergedIds = arrayMove(mergedIds, oldIdx, newIdx)
-    const pnNewIdx = newMergedIds.indexOf(PRIVATE_NOTES_ID)
-    if (pnNewIdx !== privateNotesIndex) onPrivateNotesIndexChange(pnNewIdx)
-    const newColIds = newMergedIds.filter((id) => id !== PRIVATE_NOTES_ID)
+
+    // Extract new titleIndex (count of real col IDs before TITLE_COL_ID)
+    const titlePos = newMergedIds.indexOf(TITLE_COL_ID)
+    const newTitleIdx = newMergedIds.slice(0, titlePos).filter((id) => id !== PRIVATE_NOTES_ID).length
+    if (newTitleIdx !== titleIndex) onTitleIndexChange(newTitleIdx)
+
+    // Extract new privateNotesIndex (count of real col IDs before PRIVATE_NOTES_ID)
+    const pnPos = newMergedIds.indexOf(PRIVATE_NOTES_ID)
+    const newPnIdx = newMergedIds.slice(0, pnPos).filter((id) => id !== TITLE_COL_ID).length
+    if (newPnIdx !== privateNotesIndex) onPrivateNotesIndexChange(newPnIdx)
+
+    const newColIds = newMergedIds.filter((id) => id !== PRIVATE_NOTES_ID && id !== TITLE_COL_ID)
     const oldColIds = visibleColumns.map((c) => c.id)
     if (JSON.stringify(newColIds) !== JSON.stringify(oldColIds)) {
       const hidden = columns.filter((c) => !visibleColumns.some((v) => v.id === c.id))
@@ -268,22 +322,21 @@ export function ColumnHeaders({
       {/* Duration */}
       <div className={cn('shrink-0 flex items-center px-3.5', LABEL)} style={{ width: CF.dur }}>Dur.</div>
 
-      {/* Title — resizable */}
-      <div className={cn('relative shrink-0 flex items-center px-4', LABEL)} style={{ width: titleWidth }}>
-        Title
-        <div
-          onMouseDown={startTitleResize}
-          title="Drag to resize"
-          className="absolute -right-[3px] top-0 bottom-0 w-2 cursor-col-resize z-[5] hover:bg-[#f0a838]/40 transition-colors"
-        />
-      </div>
-
-      {/* Dynamic columns + Private notes (sortable together) */}
-      <DndContext id="column-headers-dnd" sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-        <SortableContext items={buildMergedIds(visibleColumns, privateNotesIndex)} strategy={horizontalListSortingStrategy}>
-          {buildMergedIds(visibleColumns, privateNotesIndex).map((id) => {
+      {/* Dynamic columns + Title + Private notes (all sortable together) */}
+      <DndContext id="column-headers-dnd" sensors={sensors} collisionDetection={closestCenter} onDragStart={lockScroll} onDragEnd={(e) => { unlockScroll(); handleDragEnd(e) }} onDragCancel={unlockScroll}>
+        <SortableContext items={buildMergedIds(visibleColumns, titleIndex, privateNotesIndex)} strategy={horizontalListSortingStrategy}>
+          {buildMergedIds(visibleColumns, titleIndex, privateNotesIndex).map((id) => {
+            if (id === TITLE_COL_ID) {
+              return (
+                <SortableTitleHeader
+                  key={TITLE_COL_ID}
+                  width={titleWidth}
+                  onResizeStart={startTitleResize}
+                />
+              )
+            }
             if (id === PRIVATE_NOTES_ID) {
-              return <SortablePrivateNotesHeader key={PRIVATE_NOTES_ID} />
+              return <SortablePrivateNotesHeader key={PRIVATE_NOTES_ID} width={privateNotesWidth} onResizeStart={startPrivateNotesResize} />
             }
             const col = visibleColumns.find((c) => c.id === id)
             if (!col) return null
@@ -354,7 +407,7 @@ export function ColumnHeaders({
             <DropdownMenuSeparator className="bg-[#1d1d24]" />
 
             <DropdownMenuItem
-              onClick={() => { onUnhideAll(); onTitleWidthChange(TITLE_COL_WIDTH) }}
+              onClick={() => { onUnhideAll(); onTitleWidthChange(TITLE_COL_WIDTH); onTitleIndexChange(0) }}
               className={EDIT_ITEM}
             >
               <RotateCcw className="w-3.5 h-3.5 text-[#9ba0ab]" /> Reset column layout
@@ -547,18 +600,20 @@ function SortableColumnHeader({
       <div
         onMouseDown={onResizeStart}
         title="Drag to resize"
-        className="absolute -right-[3px] top-0 bottom-0 w-2 cursor-col-resize z-[5] hover:bg-[#f0a838]/40 transition-colors"
-      />
+        className="absolute -right-[3px] top-0 bottom-0 w-2 cursor-col-resize z-[5] flex items-center justify-center group/rh hover:bg-[#f0a838]/15 transition-colors"
+      >
+        <div className="w-px h-[55%] bg-[#2e2e38] group-hover/rh:bg-[#f0a838]/80 transition-colors pointer-events-none" />
+      </div>
     </div>
   )
 }
 
-function SortablePrivateNotesHeader() {
+function SortableTitleHeader({ width, onResizeStart }: { width: number; onResizeStart: (e: React.MouseEvent) => void }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id: PRIVATE_NOTES_ID })
+    useSortable({ id: TITLE_COL_ID })
 
   const style = {
-    width: PRIVATE_NOTES_WIDTH,
+    width,
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.6 : 1,
@@ -568,7 +623,44 @@ function SortablePrivateNotesHeader() {
     <div
       ref={setNodeRef}
       style={style}
-      className="group/col shrink-0 flex items-center gap-1.5 px-3.5"
+      className="group/col relative shrink-0 flex items-center gap-1.5 px-3.5"
+    >
+      <button
+        {...attributes}
+        {...listeners}
+        title="Drag to reorder column"
+        className="opacity-0 group-hover/col:opacity-100 transition-opacity text-[#5a5c66] hover:text-[#9ba0ab] cursor-grab active:cursor-grabbing -ml-1"
+      >
+        <GripVertical className="w-3 h-3" />
+      </button>
+      <span className={cn('flex-1 truncate', LABEL)}>Title</span>
+      <div
+        onMouseDown={onResizeStart}
+        title="Drag to resize"
+        className="absolute -right-[3px] top-0 bottom-0 w-2 cursor-col-resize z-[5] flex items-center justify-center group/rh hover:bg-[#f0a838]/15 transition-colors"
+      >
+        <div className="w-px h-[55%] bg-[#2e2e38] group-hover/rh:bg-[#f0a838]/80 transition-colors pointer-events-none" />
+      </div>
+    </div>
+  )
+}
+
+function SortablePrivateNotesHeader({ width, onResizeStart }: { width: number; onResizeStart: (e: React.MouseEvent) => void }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: PRIVATE_NOTES_ID })
+
+  const style = {
+    width,
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.6 : 1,
+  }
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="group/col relative shrink-0 flex items-center gap-1.5 px-3.5"
       title="Private notes — visible only to you. Drag to reorder."
     >
       <button
@@ -582,6 +674,13 @@ function SortablePrivateNotesHeader() {
       </button>
       <span className={LABEL}>Private notes</span>
       <Info className="w-[11px] h-[11px] text-[#5a5c66] shrink-0" />
+      <div
+        onMouseDown={onResizeStart}
+        title="Drag to resize"
+        className="absolute -right-[3px] top-0 bottom-0 w-2 cursor-col-resize z-[5] flex items-center justify-center group/rh hover:bg-[#f0a838]/15 transition-colors"
+      >
+        <div className="w-px h-[55%] bg-[#2e2e38] group-hover/rh:bg-[#f0a838]/80 transition-colors pointer-events-none" />
+      </div>
     </div>
   )
 }

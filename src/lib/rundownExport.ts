@@ -35,8 +35,8 @@ function rowFor(
     isGroup: false,
     start: formatMsToTime(t?.calculated_start_ms ?? 0),
     duration: formatDuration(cue.duration_ms),
-    title: cue.title || '',
-    subtitle: cue.subtitle || '',
+    title: stripHtml(cue.title) || '',
+    subtitle: stripHtml(cue.subtitle) || '',
     cells: columns.map((col) =>
       cellToPlainText(cellMap[`${cue.id}:${col.id}`], varMap, col.col_type, mentionNameById)
     ),
@@ -78,7 +78,7 @@ export function buildExportRows(
         isGroup: true,
         start: formatMsToTime(startMs),
         duration: formatDuration(dur),
-        title: item.heading.title || 'Group',
+        title: stripHtml(item.heading.title) || 'Group',
         subtitle: '',
         cells: columns.map(() => ''),
       })

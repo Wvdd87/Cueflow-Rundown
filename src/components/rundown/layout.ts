@@ -18,8 +18,9 @@ export const CF = {
 
 export const TITLE_COL_WIDTH = 260
 export const PRIVATE_NOTES_WIDTH = CF.pn
-// Sentinel id used in the column DnD to represent the Private Notes column.
+// Sentinel ids used in the column DnD to represent virtual columns.
 export const PRIVATE_NOTES_ID = '__private-notes__'
+export const TITLE_COL_ID = '__title__'
 
 // 12-colour cue background palette (null = no colour).
 export const CUE_COLORS: (string | null)[] = [
@@ -38,8 +39,8 @@ export const CUE_COLORS: (string | null)[] = [
 ]
 
 /** Total pixel width of a full row (gutter + all blocks + gaps + padding). */
-export function totalRowWidth(titleWidth: number, visibleColWidths: number[]): number {
-  const blockWs = [CF.num, CF.start, CF.dur, titleWidth, ...visibleColWidths, CF.pn]
+export function totalRowWidth(titleWidth: number, visibleColWidths: number[], pnWidth: number = CF.pn): number {
+  const blockWs = [CF.num, CF.start, CF.dur, titleWidth, ...visibleColWidths, pnWidth]
   const sumBlockW = blockWs.reduce((a, b) => a + b, 0)
   const nBlocks = blockWs.length
   return CF.rowPad * 2 + CF.c1 + sumBlockW + CF.gap * nBlocks

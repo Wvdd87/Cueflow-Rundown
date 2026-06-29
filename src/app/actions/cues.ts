@@ -11,7 +11,7 @@ async function getRundownAccess(rundownId: string) {
   return { supabase, userId: user.id, rundownId }
 }
 
-export async function addCue(rundownId: string, afterPosition: number) {
+export async function addCue(rundownId: string, afterPosition: number, groupId?: string) {
   const { supabase } = await getRundownAccess(rundownId)
 
   // Shift positions of cues after insert point
@@ -28,6 +28,7 @@ export async function addCue(rundownId: string, afterPosition: number) {
       cue_number: '',
       title: '',
       duration_ms: 0,
+      ...(groupId ? { group_id: groupId } : {}),
     } as never)
     .select('*')
     .single()
@@ -99,7 +100,7 @@ export async function convertCueToHeading(id: string, rundownId: string) {
 export async function updateCue(
   id: string,
   rundownId: string,
-  updates: Partial<Pick<Cue, 'title' | 'subtitle' | 'cue_number' | 'duration_ms' | 'start_type' | 'start_time_override' | 'auto_start' | 'background_color' | 'locked'>>
+  updates: Partial<Pick<Cue, 'title' | 'subtitle' | 'cue_number' | 'duration_ms' | 'start_type' | 'start_time_override' | 'auto_start' | 'background_color' | 'locked' | 'group_id'>>
 ) {
   const { supabase } = await getRundownAccess(rundownId)
 
@@ -388,6 +389,24 @@ export async function ungroupCues(rundownId: string, ids: string[]) {
     if (error) return { error: error.message }
   }
 
+  revalidatePath(`/rundown/${rundownId}`)
+  return { success: true }
+}
+
+/** Remove a single cue from its group (set group_id = null) and apply the new order. */
+export async function removeFromGroup(cueId: string, rundownId: string, newOrderIds: string[]) {
+  const { supabase } = await getRundownAccess(rundownId)
+
+  await supabase.from('cues').update({ group_id: null } as never).eq('id', cueId)
+
+  const { error } = await supabase
+    .from('cues')
+    .upsert(
+      newOrderIds.map((id, i) => ({ id, position: i, rundown_id: rundownId })) as never,
+      { onConflict: 'id' }
+    )
+
+  if (error) return { error: error.message }
   revalidatePath(`/rundown/${rundownId}`)
   return { success: true }
 }

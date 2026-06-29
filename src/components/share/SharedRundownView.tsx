@@ -11,7 +11,7 @@ import {
   type CueTimingOutput,
 } from '@/lib/timing'
 import { resolveVariablesHtml, resolveMentionsHtml, parseDropdownValues } from '@/lib/cellHtml'
-import { CF, textOn } from '@/components/rundown/layout'
+import { CF, TITLE_COL_ID, textOn } from '@/components/rundown/layout'
 import { RichNoteCell } from '@/components/rundown/RichNoteCell'
 import { RundownSearch, type SearchCue } from '@/components/rundown/RundownSearch'
 import { StatusBadge } from '@/components/StatusBadge'
@@ -107,6 +107,7 @@ export function SharedRundownView({
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set())
   const [privateNotes, setPrivateNotes] = useState<Record<string, string>>(initialPrivateNotes)
   const [myNotesWidth, setMyNotesWidth] = useState<number>(CF.pn)
+  const [titleIndex, setTitleIndex] = useState<number>(0)
   const [hydrated, setHydrated] = useState(false)
 
   // ── Live follow ("keep the current cue pinned to the top") ─────────────────
@@ -133,6 +134,8 @@ export function SharedRundownView({
     setCollapsed(new Set(loadJson<string[]>(lsKey(rundown.id, 'collapsed'), [])))
     const nw = loadJson<number | null>(lsKey(rundown.id, 'myNotesWidth'), null)
     if (typeof nw === 'number') setMyNotesWidth(nw)
+    const ti = loadJson<number | null>(lsKey(rundown.id, 'titleIndex'), null)
+    if (typeof ti === 'number') setTitleIndex(ti)
     setHydrated(true)
   }, [rundown.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -153,6 +156,7 @@ export function SharedRundownView({
   useEffect(() => { if (hydrated) localStorage.setItem(lsKey(rundown.id, 'hiddenCols'), JSON.stringify([...hiddenCols])) }, [hiddenCols, rundown.id, hydrated])
   useEffect(() => { if (hydrated) localStorage.setItem(lsKey(rundown.id, 'collapsed'), JSON.stringify([...collapsed])) }, [collapsed, rundown.id, hydrated])
   useEffect(() => { if (hydrated) localStorage.setItem(lsKey(rundown.id, 'myNotesWidth'), JSON.stringify(myNotesWidth)) }, [myNotesWidth, rundown.id, hydrated])
+  useEffect(() => { if (hydrated) localStorage.setItem(lsKey(rundown.id, 'titleIndex'), JSON.stringify(titleIndex)) }, [titleIndex, rundown.id, hydrated])
 
   const handleNoteChange = useCallback((cueId: string, value: string) => {
     setPrivateNotes((prev) => ({ ...prev, [cueId]: value }))
@@ -270,15 +274,41 @@ export function SharedRundownView({
   // ── Column interactions (per-viewer) ────────────────────────────────────────
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
 
+  // Merged list of visible column IDs + TITLE_COL_ID sentinel for DnD
+  const mergedHeaderIds = useMemo(() => {
+    const visibleIds = visibleColumns.map((c) => c.id)
+    const result = [...visibleIds]
+    const insertAt = Math.min(Math.max(0, titleIndex), result.length)
+    result.splice(insertAt, 0, TITLE_COL_ID)
+    return result
+  }, [visibleColumns, titleIndex])
+
+  function lockScroll() {
+    const el = scrollRef.current
+    if (el) el.style.overflow = 'hidden'
+  }
+  function unlockScroll() {
+    const el = scrollRef.current
+    if (el) el.style.overflow = ''
+  }
+
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event
     if (!over || active.id === over.id) return
-    setLocalOrder((prev) => {
-      const oldIdx = prev.indexOf(active.id as string)
-      const newIdx = prev.indexOf(over.id as string)
-      if (oldIdx < 0 || newIdx < 0) return prev
-      return arrayMove(prev, oldIdx, newIdx)
-    })
+    const oldIdx = mergedHeaderIds.indexOf(active.id as string)
+    const newIdx = mergedHeaderIds.indexOf(over.id as string)
+    if (oldIdx < 0 || newIdx < 0) return
+    const newMergedIds = arrayMove(mergedHeaderIds, oldIdx, newIdx)
+
+    // Extract new titleIndex (count of real col IDs before TITLE_COL_ID)
+    const titlePos = newMergedIds.indexOf(TITLE_COL_ID)
+    const newTitleIdx = newMergedIds.slice(0, titlePos).length
+    if (newTitleIdx !== titleIndex) setTitleIndex(newTitleIdx)
+
+    // Update column order (visible cols only; preserve hidden at end)
+    const newColIds = newMergedIds.filter((id) => id !== TITLE_COL_ID)
+    const hiddenIds = localOrder.filter((id) => hiddenCols.has(id))
+    setLocalOrder([...newColIds, ...hiddenIds])
   }
 
   function makeResizer(selector: string, getStart: () => number, commit: (w: number) => void) {
@@ -322,8 +352,8 @@ export function SharedRundownView({
     : null
 
   // ── Cell rendering ──────────────────────────────────────────────────────────
-  function renderCells(cueId: string, baseBg: string) {
-    return visibleColumns.map((col) => {
+  function renderColCells(cols: Column[], cueId: string, baseBg: string) {
+    return cols.map((col) => {
       const raw = cellMap[`${cueId}:${col.id}`] ?? ''
       const w = localWidths[col.id] ?? col.width
       return (
@@ -336,6 +366,12 @@ export function SharedRundownView({
         </div>
       )
     })
+  }
+  function renderLeftCells(cueId: string, baseBg: string) {
+    return renderColCells(visibleColumns.slice(0, titleIndex), cueId, baseBg)
+  }
+  function renderRightCells(cueId: string, baseBg: string) {
+    return renderColCells(visibleColumns.slice(titleIndex), cueId, baseBg)
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -395,22 +431,31 @@ export function SharedRundownView({
             <HeaderCell width={CF.num} className="justify-center">#</HeaderCell>
             <HeaderCell width={CF.start}>Start</HeaderCell>
             <HeaderCell width={CF.dur}>Dur.</HeaderCell>
-            <div data-share-title-col style={{ width: titleWidth }} className={cn('relative shrink-0 flex items-center', LABEL, 'text-[#7c7e8a]')}>
-              Title
-              <ResizeHandle onMouseDown={startTitleResize} />
-            </div>
 
-            <DndContext id="share-col-dnd" sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-              <SortableContext items={localOrder.filter((id) => !hiddenCols.has(id))} strategy={horizontalListSortingStrategy}>
-                {visibleColumns.map((col) => (
-                  <ShareColumnHeader
-                    key={col.id}
-                    col={col}
-                    width={localWidths[col.id] ?? col.width}
-                    onHide={() => toggleHide(col.id)}
-                    onResizeStart={(e) => startColResize(e, col)}
-                  />
-                ))}
+            <DndContext id="share-col-dnd" sensors={sensors} collisionDetection={closestCenter} onDragStart={lockScroll} onDragEnd={(e) => { unlockScroll(); handleDragEnd(e) }} onDragCancel={unlockScroll}>
+              <SortableContext items={mergedHeaderIds} strategy={horizontalListSortingStrategy}>
+                {mergedHeaderIds.map((id) => {
+                  if (id === TITLE_COL_ID) {
+                    return (
+                      <ShareSortableTitleHeader
+                        key={TITLE_COL_ID}
+                        width={titleWidth}
+                        onResizeStart={startTitleResize}
+                      />
+                    )
+                  }
+                  const col = visibleColumns.find((c) => c.id === id)
+                  if (!col) return null
+                  return (
+                    <ShareColumnHeader
+                      key={col.id}
+                      col={col}
+                      width={localWidths[col.id] ?? col.width}
+                      onHide={() => toggleHide(col.id)}
+                      onResizeStart={(e) => startColResize(e, col)}
+                    />
+                  )
+                })}
               </SortableContext>
             </DndContext>
 
@@ -463,7 +508,8 @@ export function SharedRundownView({
                         timeFormat={rundown.time_display ?? 'auto'}
                         titleWidth={titleWidth}
                         notesWidth={myNotesWidth}
-                        renderCells={renderCells}
+                        renderLeftCells={renderLeftCells}
+                        renderRightCells={renderRightCells}
                         note={privateNotes[ch.id] ?? ''}
                         onNoteChange={handleNoteChange}
                       />
@@ -483,7 +529,8 @@ export function SharedRundownView({
                   timeFormat={rundown.time_display ?? 'auto'}
                   titleWidth={titleWidth}
                   notesWidth={myNotesWidth}
-                  renderCells={renderCells}
+                  renderLeftCells={renderLeftCells}
+                        renderRightCells={renderRightCells}
                   note={privateNotes[item.cue.id] ?? ''}
                   onNoteChange={handleNoteChange}
                 />
@@ -560,13 +607,14 @@ interface ShareCueRowProps {
   timeFormat: 'auto' | '24h' | '12h' | '12h_no_ampm'
   titleWidth: number
   notesWidth: number
-  renderCells: (cueId: string, baseBg: string) => React.ReactNode
+  renderLeftCells: (cueId: string, baseBg: string) => React.ReactNode
+  renderRightCells: (cueId: string, baseBg: string) => React.ReactNode
   note: string
   onNoteChange: (cueId: string, value: string) => void
 }
 
 function ShareCueRow({
-  cue, displayNumber, depth, live, activeRef, timeFormat, titleWidth, notesWidth, renderCells, note, onNoteChange,
+  cue, displayNumber, depth, live, activeRef, timeFormat, titleWidth, notesWidth, renderLeftCells, renderRightCells, note, onNoteChange,
 }: ShareCueRowProps) {
   const isActive = live.activeCueId === cue.id
   const isNext = live.nextCueId === cue.id
@@ -631,6 +679,9 @@ function ShareCueRow({
           )}
         </div>
 
+        {/* Left-of-title dynamic cells */}
+        {renderLeftCells(cue.id, baseBg)}
+
         {/* Title + subtitle */}
         <div className="shrink-0 flex flex-col" data-share-title-col style={{ width: titleWidth, minHeight: CF.minRowH, background: baseBg, padding: '12px 16px' }}>
           <span className="text-[16px] font-medium leading-[1.35] break-words [overflow-wrap:anywhere]" style={{ color: cue.title ? ct.hi : '#6b6d78', fontStyle: cue.title ? 'normal' : 'italic' }}>
@@ -639,8 +690,8 @@ function ShareCueRow({
           {cue.subtitle && <span className="text-xs mt-0.5 break-words [overflow-wrap:anywhere] leading-[1.3]" style={{ color: ct.mid }}>{cue.subtitle}</span>}
         </div>
 
-        {/* Dynamic cells */}
-        {renderCells(cue.id, baseBg)}
+        {/* Right-of-title dynamic cells */}
+        {renderRightCells(cue.id, baseBg)}
 
         {/* My notes */}
         <div data-share-notes-col style={tile(notesWidth, '#16161c', { padding: '10px 4px' })}>
@@ -826,6 +877,21 @@ function ShareColumnHeader({ col, width, onHide, onResizeStart }: ShareColumnHea
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+      <ResizeHandle onMouseDown={onResizeStart} />
+    </div>
+  )
+}
+
+function ShareSortableTitleHeader({ width, onResizeStart }: { width: number; onResizeStart: (e: React.MouseEvent) => void }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: TITLE_COL_ID })
+  const style = { width, transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }
+
+  return (
+    <div ref={setNodeRef} data-share-title-col style={style} className="group/col relative shrink-0 flex items-center pl-1">
+      <button {...attributes} {...listeners} title="Drag to reorder" className="opacity-0 group-hover/col:opacity-100 transition-opacity text-[#5a5c66] hover:text-[#9ba0ab] cursor-grab active:cursor-grabbing mr-0.5">
+        <GripVertical className="w-3 h-3" />
+      </button>
+      <span className={cn('flex-1', LABEL, 'text-[#7c7e8a] truncate')}>Title</span>
       <ResizeHandle onMouseDown={onResizeStart} />
     </div>
   )

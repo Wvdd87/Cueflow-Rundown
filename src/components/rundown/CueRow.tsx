@@ -13,6 +13,7 @@ import {
   Copy,
   Plus,
   GripVertical,
+  Ungroup,
 } from 'lucide-react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -25,6 +26,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { RichTextCell } from './RichTextCell'
+import { InlineTipTap } from './InlineTipTap'
 import { DropdownCell } from './DropdownCell'
 import { PrivateNoteCell } from './PrivateNoteCell'
 import {
@@ -36,7 +38,7 @@ import {
   PRIVATE_NOTES_ID,
 } from './layout'
 import { formatDuration, parseDurationInput, formatMsToTime, formatMsToTimeDisplay, parseTimeToMs } from '@/lib/timing'
-import { cn } from '@/lib/utils'
+import { cn, inlineHtml } from '@/lib/utils'
 import type { Cue, Column } from '@/lib/supabase/types'
 import type { CueTimingOutput, TimeDisplay } from '@/lib/timing'
 
@@ -57,6 +59,7 @@ interface CueRowProps {
   onAddAbove: (id: string) => void
   onAddBelow: (id: string) => void
   onDuplicate: (id: string) => void
+  onRemoveFromGroup?: (id: string) => void
   onCellChange: (cueId: string, columnId: string, content: string) => void
   live: boolean
   isActive: boolean
@@ -71,8 +74,12 @@ interface CueRowProps {
   nextAutoStart: boolean | null
   onToggleNextAutoStart: () => void
   privateNotesIndex: number
+  privateNotesWidth?: number
+  titleIndex?: number
   timeFormat?: TimeDisplay
   titleWidth?: number
+  groupColor?: string | null
+  focusTitle?: boolean
 }
 
 const LABEL_FONT =
@@ -93,6 +100,7 @@ export function CueRow({
   onAddAbove,
   onAddBelow,
   onDuplicate,
+  onRemoveFromGroup,
   onCellChange,
   live,
   isActive,
@@ -107,15 +115,21 @@ export function CueRow({
   nextAutoStart,
   onToggleNextAutoStart,
   privateNotesIndex,
+  privateNotesWidth = PRIVATE_NOTES_WIDTH,
+  titleIndex = 0,
   timeFormat = 'auto',
   titleWidth = TITLE_COL_WIDTH,
+  groupColor,
+  focusTitle = false,
 }: CueRowProps) {
   const [editingDuration, setEditingDuration] = useState(false)
   const [durationInput, setDurationInput] = useState('')
-  const [editingTitle, setEditingTitle] = useState(false)
-  const [titleInput, setTitleInput] = useState(cue.title)
+  const [editingTitle, setEditingTitle] = useState(focusTitle)
+
+  useEffect(() => {
+    if (focusTitle) setEditingTitle(true)
+  }, [focusTitle])
   const [editingSubtitle, setEditingSubtitle] = useState(false)
-  const [subtitleInput, setSubtitleInput] = useState(cue.subtitle ?? '')
   const [editingStart, setEditingStart] = useState(false)
   const [startInput, setStartInput] = useState('')
   const durationRef = useRef<HTMLInputElement>(null)
@@ -146,10 +160,7 @@ export function CueRow({
     cont.scrollTo({ top: cont.scrollTop + (rr.top - cr.top) - (CF.headerH + 8), behavior: 'smooth' })
   }, [isActive])
 
-  useEffect(() => { setTitleInput(cue.title) }, [cue.title])
-  useEffect(() => { setSubtitleInput(cue.subtitle ?? '') }, [cue.subtitle])
-
-  // --- Editing handlers (unchanged logic) ---
+  // --- Editing handlers ---
   function startDurationEdit() {
     setDurationInput(formatDuration(cue.duration_ms))
     setEditingDuration(true)
@@ -162,19 +173,18 @@ export function CueRow({
     onUpdate(cue.id, { duration_ms: ms })
     await updateCue(cue.id, rundownId, { duration_ms: ms })
   }
-  async function saveTitle() {
+  function saveTitleHtml(html: string) {
     setEditingTitle(false)
-    const t = titleInput.trim()
-    if (t === cue.title) return
-    onUpdate(cue.id, { title: t })
-    await updateCue(cue.id, rundownId, { title: t })
+    if (html === cue.title) return
+    onUpdate(cue.id, { title: html })
+    updateCue(cue.id, rundownId, { title: html })
   }
-  async function saveSubtitle() {
+  function saveSubtitleHtml(html: string) {
     setEditingSubtitle(false)
-    const s = subtitleInput.trim()
-    if (s === (cue.subtitle ?? '')) return
-    onUpdate(cue.id, { subtitle: s || null })
-    await updateCue(cue.id, rundownId, { subtitle: s || null })
+    const value = !html || html === '<p></p>' ? null : html
+    if (value === cue.subtitle) return
+    onUpdate(cue.id, { subtitle: value })
+    updateCue(cue.id, rundownId, { subtitle: value })
   }
   function handleDelete() { onDelete(cue.id) }
   async function toggleStartType() {
@@ -259,16 +269,16 @@ export function CueRow({
         className="group relative flex"
         style={{ gap: CF.gap, padding: `0 ${CF.rowPad}px` }}
       >
-        {/* Control gutter (drag / settings / select) */}
+        {/* Control gutter (drag / settings / select) — stacked at top */}
         <div
-          className="shrink-0 relative flex items-center justify-center group/col1"
-          style={{ width: CF.c1, boxShadow: depth > 0 ? 'inset 2px 0 0 #3a3a48' : 'none' }}
+          className="shrink-0 flex flex-col items-center pt-2 gap-1.5 group/col1"
+          style={{ width: CF.c1, boxShadow: depth > 0 ? `inset 3px 0 0 ${groupColor ?? '#4a4a5a'}` : 'none' }}
         >
           <button
             {...attributes}
             {...listeners}
             title="Drag to reorder"
-            className="absolute top-[3px] left-1/2 -translate-x-1/2 text-[#5a5c66] hover:text-[#9ba0ab] cursor-grab active:cursor-grabbing opacity-0 group-hover/col1:opacity-100 transition-opacity"
+            className="text-[#7c7e8a] hover:text-[#eef0f3] cursor-grab active:cursor-grabbing opacity-0 group-hover/col1:opacity-100 transition-opacity"
           >
             <GripVertical className="w-3.5 h-3.5" />
           </button>
@@ -279,7 +289,7 @@ export function CueRow({
                 <button
                   title="Cue options"
                   data-testid="cue-settings-btn"
-                  className="p-[3px] text-[#5a5c66] hover:text-[#c8c9d0] data-[state=open]:bg-[#1d1d24] data-[state=open]:text-[#eef0f3] transition-colors"
+                  className="p-[3px] text-[#7c7e8a] hover:text-[#eef0f3] data-[state=open]:bg-[#1d1d24] data-[state=open]:text-[#eef0f3] transition-colors"
                 />
               }
             >
@@ -322,6 +332,11 @@ export function CueRow({
                 </div>
               </div>
 
+              {depth > 0 && onRemoveFromGroup && (
+                <DropdownMenuItem onClick={() => onRemoveFromGroup(cue.id)} className={MI}>
+                  <Ungroup className="w-3.5 h-3.5 text-[#9ba0ab]" /> Remove from group
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem onClick={() => onConvertToHeading(cue.id)} data-testid="convert-to-heading-menu-item" className={MI}>
                 <HeadingIcon className="w-3.5 h-3.5 text-[#9ba0ab]" /> Convert to heading
               </DropdownMenuItem>
@@ -340,7 +355,7 @@ export function CueRow({
             onClick={(e) => onSelect(cue.id, { shift: e.shiftKey, meta: true })}
             title="Select cue"
             className={cn(
-              'absolute bottom-[3px] left-1/2 -translate-x-1/2 w-3.5 h-3.5 flex items-center justify-center transition-all',
+              'w-3.5 h-3.5 flex items-center justify-center transition-all',
               selected ? 'opacity-100' : 'opacity-0 group-hover/col1:opacity-100'
             )}
             style={{
@@ -447,38 +462,61 @@ export function CueRow({
           )}
         </div>
 
+        {/* Left-of-title dynamic cells */}
+        {(() => {
+          const leftCols = columns.slice(0, titleIndex)
+          return leftCols.map((col) => (
+            <div key={col.id} style={tile(col.width, { padding: '10px 2px' })}>
+              {col.col_type === 'dropdown' ? (
+                <DropdownCell
+                  cueId={cue.id}
+                  columnId={col.id}
+                  rundownId={rundownId}
+                  options={col.options ?? []}
+                  optionColors={col.option_colors}
+                  value={cells[`${cue.id}:${col.id}`] ?? ''}
+                  onContentChange={onCellChange}
+                />
+              ) : (
+                <RichTextCell
+                  cueId={cue.id}
+                  columnId={col.id}
+                  rundownId={rundownId}
+                  initialContent={cells[`${cue.id}:${col.id}`] ?? ''}
+                  onContentChange={onCellChange}
+                />
+              )}
+            </div>
+          ))
+        })()}
+
         {/* Title + subtitle */}
         <div className="group/title shrink-0 flex flex-col" style={{ width: titleWidth, minHeight: CF.minRowH, background: baseCellBg, padding: '12px 16px' }}>
           {editingTitle ? (
-            <input
-              autoFocus
-              value={titleInput}
-              onChange={(e) => setTitleInput(e.target.value)}
-              onBlur={saveTitle}
-              onKeyDown={(e) => { if (e.key === 'Enter') saveTitle(); if (e.key === 'Escape') { setEditingTitle(false); setTitleInput(cue.title) } }}
-              className="w-full bg-transparent text-[15px] font-medium outline-none border-b border-[#f0a838]"
-              style={{ color: ct.hi }}
+            <InlineTipTap
+              initialContent={cue.title}
+              onSave={saveTitleHtml}
+              editorClassName="tiptap-cell focus:outline-none w-full text-[15px] font-medium border-b border-[#f0a838]"
+              className="w-full"
             />
           ) : (
             <button
               onClick={() => setEditingTitle(true)}
               className="text-[16px] font-medium text-left w-full leading-[1.35] break-words [overflow-wrap:anywhere] transition-colors"
-              style={{ color: cue.title ? ct.hi : (cue.background_color ? ct.mid : '#6b6d78'), fontStyle: cue.title ? 'normal' : 'italic' }}
+              style={{ color: cue.title ? ct.hi : (cue.background_color ? ct.mid : '#6b6d78') }}
             >
-              {cue.title || 'Untitled cue'}
+              {cue.title
+                ? <span className="tiptap-cell" dangerouslySetInnerHTML={{ __html: inlineHtml(cue.title) }} />
+                : <span style={{ fontStyle: 'italic' }}>Untitled cue</span>}
             </button>
           )}
 
           {editingSubtitle ? (
-            <input
-              autoFocus
-              value={subtitleInput}
-              onChange={(e) => setSubtitleInput(e.target.value)}
-              onBlur={saveSubtitle}
-              onKeyDown={(e) => { if (e.key === 'Enter') saveSubtitle(); if (e.key === 'Escape') { setEditingSubtitle(false); setSubtitleInput(cue.subtitle ?? '') } }}
-              placeholder="Subtitle"
-              className="w-full bg-transparent text-xs outline-none border-b border-[#3a3a48] mt-0.5"
-              style={{ color: ct.mid }}
+            <InlineTipTap
+              initialContent={cue.subtitle ?? ''}
+              onSave={saveSubtitleHtml}
+              editorClassName="tiptap-cell focus:outline-none w-full text-xs border-b border-[#3a3a48] mt-0.5"
+              className="w-full mt-0.5"
             />
           ) : cue.subtitle ? (
             <button
@@ -486,7 +524,7 @@ export function CueRow({
               className="text-xs text-left w-full break-words [overflow-wrap:anywhere] mt-0.5 leading-[1.3] transition-colors"
               style={{ color: ct.mid }}
             >
-              {cue.subtitle}
+              <span className="tiptap-cell" dangerouslySetInnerHTML={{ __html: inlineHtml(cue.subtitle) }} />
             </button>
           ) : (
             <button
@@ -499,15 +537,17 @@ export function CueRow({
           )}
         </div>
 
-        {/* Dynamic cells + Private Notes (interleaved by privateNotesIndex) */}
+        {/* Right-of-title dynamic cells + Private Notes */}
         {(() => {
-          const insertAt = Math.min(Math.max(0, privateNotesIndex), columns.length)
-          const mergedIds = columns.map((c) => c.id as string)
+          const rightCols = columns.slice(titleIndex)
+          const pnInRight = Math.max(0, privateNotesIndex - titleIndex)
+          const insertAt = Math.min(Math.max(0, pnInRight), rightCols.length)
+          const mergedIds = rightCols.map((c) => c.id as string)
           mergedIds.splice(insertAt, 0, PRIVATE_NOTES_ID)
           return mergedIds.map((id) => {
             if (id === PRIVATE_NOTES_ID) {
               return (
-                <div key={PRIVATE_NOTES_ID} style={tile(PRIVATE_NOTES_WIDTH, { padding: '10px 2px' })}>
+                <div key={PRIVATE_NOTES_ID} style={tile(privateNotesWidth, { padding: '10px 2px' })}>
                   <PrivateNoteCell
                     cueId={cue.id}
                     rundownId={rundownId}
@@ -517,7 +557,7 @@ export function CueRow({
                 </div>
               )
             }
-            const col = columns.find((c) => c.id === id)
+            const col = rightCols.find((c) => c.id === id)
             if (!col) return null
             return (
               <div key={col.id} style={tile(col.width, { padding: '10px 2px' })}>

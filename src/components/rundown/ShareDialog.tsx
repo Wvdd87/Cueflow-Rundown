@@ -93,7 +93,7 @@ export function ShareDialog({ rundownId, columns, open, onOpenChange }: ShareDia
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4 p-5">
+        <div className="space-y-4 p-5 overflow-y-auto max-h-[calc(85vh-68px)]">
           <p className="text-sm text-[#9ba0ab]">
             Make a separate link per person or team. Each link can show a different
             set of columns, and follows the show live as you run it.

@@ -6,6 +6,7 @@ import { useEditor, EditorContent, type Editor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Heading from '@tiptap/extension-heading'
 import { TextStyle, Color } from '@tiptap/extension-text-style'
+import { HeadingSize } from './HeadingSize'
 import Highlight from '@tiptap/extension-highlight'
 import Placeholder from '@tiptap/extension-placeholder'
 import Image from '@tiptap/extension-image'
@@ -275,6 +276,7 @@ function CellTipTap({
     extensions: [
       StarterKit.configure({ heading: false }),
       Heading.configure({ levels: [1, 2, 3] }),
+      HeadingSize,
       TextStyle,
       Color,
       Highlight.configure({ multicolor: true }),
@@ -492,8 +494,8 @@ export function BubbleTipTapToolbar({ editor }: { editor: Editor }) {
       <div className="relative">
         <button
           type="button"
-          className={tbBtn(editor.isActive('heading'))}
-          title="Text style"
+          className={tbBtn(editor.isActive('headingSize'))}
+          title="Text size"
           onMouseDown={(e) => {
             e.preventDefault()
             setOpenMenu(openMenu === 'heading' ? null : 'heading')
@@ -505,11 +507,11 @@ export function BubbleTipTapToolbar({ editor }: { editor: Editor }) {
         {openMenu === 'heading' && (
           <div className="absolute top-full mt-1 left-0 z-10 bg-zinc-900 border border-zinc-700 rounded shadow-lg min-w-[130px]">
             {([
-              { label: 'Paragraph', active: !editor.isActive('heading'), cmd: () => editor.chain().focus().setParagraph().run() },
-              { label: 'Heading 1', active: editor.isActive('heading', { level: 1 }), cmd: () => editor.chain().focus().toggleHeading({ level: 1 }).run() },
-              { label: 'Heading 2', active: editor.isActive('heading', { level: 2 }), cmd: () => editor.chain().focus().toggleHeading({ level: 2 }).run() },
-              { label: 'Heading 3', active: editor.isActive('heading', { level: 3 }), cmd: () => editor.chain().focus().toggleHeading({ level: 3 }).run() },
-            ] as const).map(({ label, active, cmd }) => (
+              { label: 'Normal', active: !editor.isActive('headingSize'), cmd: () => editor.chain().focus().unsetHeadingSize().run() },
+              { label: 'Heading 1', active: editor.isActive('headingSize', { level: 1 }), cmd: () => editor.chain().focus().toggleHeadingSize(1).run() },
+              { label: 'Heading 2', active: editor.isActive('headingSize', { level: 2 }), cmd: () => editor.chain().focus().toggleHeadingSize(2).run() },
+              { label: 'Heading 3', active: editor.isActive('headingSize', { level: 3 }), cmd: () => editor.chain().focus().toggleHeadingSize(3).run() },
+            ] as { label: string; active: boolean; cmd: () => void }[]).map(({ label, active, cmd }) => (
               <button
                 key={label}
                 type="button"

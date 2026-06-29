@@ -1,0 +1,96 @@
+'use client'
+
+import { useEffect, useRef, useCallback } from 'react'
+import { useEditor, EditorContent } from '@tiptap/react'
+import StarterKit from '@tiptap/starter-kit'
+import { TextStyle, Color } from '@tiptap/extension-text-style'
+import Highlight from '@tiptap/extension-highlight'
+import { HeadingSize } from './HeadingSize'
+import { BubbleTipTapToolbar } from './RichTextCell'
+
+interface InlineTipTapProps {
+  initialContent: string
+  placeholder?: string
+  className?: string
+  onSave: (html: string) => void
+  editorClassName?: string
+}
+
+export function InlineTipTap({
+  initialContent,
+  placeholder,
+  className,
+  onSave,
+  editorClassName,
+}: InlineTipTapProps) {
+  const wrapperRef = useRef<HTMLDivElement>(null)
+  const savedRef = useRef(false)
+
+  const editor = useEditor({
+    immediatelyRender: false,
+    extensions: [
+      StarterKit.configure({
+        heading: false,
+        blockquote: false,
+        code: false,
+        codeBlock: false,
+        horizontalRule: false,
+        bulletList: false,
+        orderedList: false,
+        listItem: false,
+      }),
+      HeadingSize,
+      TextStyle,
+      Color,
+      Highlight.configure({ multicolor: true }),
+    ],
+    content: initialContent || '',
+    autofocus: 'end',
+    editorProps: {
+      attributes: {
+        class: editorClassName ?? 'tiptap-cell focus:outline-none w-full',
+      },
+      handleKeyDown(_view, event) {
+        if (event.key === 'Enter' && !event.shiftKey) {
+          event.preventDefault()
+          return true
+        }
+        return false
+      },
+    },
+  })
+
+  const save = useCallback(() => {
+    if (!editor || savedRef.current) return
+    savedRef.current = true
+    let html = editor.getHTML()
+    // Collapse empty paragraph to empty string
+    if (html === '<p></p>') html = ''
+    onSave(html)
+  }, [editor, onSave])
+
+  // Save when clicking outside the wrapper
+  useEffect(() => {
+    function onDocMouseDown(e: MouseEvent) {
+      if (wrapperRef.current?.contains(e.target as Node)) return
+      const el = e.target as HTMLElement
+      if (el?.closest?.('[data-bubble-toolbar]')) return
+      save()
+    }
+    document.addEventListener('mousedown', onDocMouseDown)
+    return () => document.removeEventListener('mousedown', onDocMouseDown)
+  }, [save])
+
+  if (!editor) return null
+
+  return (
+    <div
+      ref={wrapperRef}
+      className={className}
+      onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); save() } }}
+    >
+      <BubbleTipTapToolbar editor={editor} />
+      <EditorContent editor={editor} />
+    </div>
+  )
+}

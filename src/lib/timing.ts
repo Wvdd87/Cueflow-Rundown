@@ -60,7 +60,13 @@ export function formatDuration(ms: number): string {
 
 /**
  * Parse user duration input to ms.
- * Accepts: "5:00" (M:SS), "1:05:00" (H:MM:SS), "300" (seconds), "5m" or "30s"
+ * Accepts:
+ *   "5m" / "30s"          — explicit unit suffixes
+ *   "M:SS" / "H:MM:SS"    — colon-separated
+ *   Pure digits (smart right-aligned HHMMSS):
+ *     1–2 digits → seconds          "15"     → 0:00:15
+ *     3–4 digits → MM SS            "230"    → 0:02:30, "1530" → 0:15:30
+ *     5–6 digits → HH MM SS         "12345"  → 1:23:45, "215630" → 21:56:30
  */
 export function parseDurationInput(raw: string): number | null {
   const s = raw.trim().toLowerCase()
@@ -75,12 +81,31 @@ export function parseDurationInput(raw: string): number | null {
     return isNaN(v) ? null : Math.round(v * 1000)
   }
 
-  const parts = s.split(':').map(Number)
-  if (parts.some(isNaN)) return null
+  if (s.includes(':')) {
+    const parts = s.split(':').map(Number)
+    if (parts.some(isNaN)) return null
+    if (parts.length === 2) return (parts[0] * 60 + parts[1]) * 1000
+    if (parts.length === 3) return (parts[0] * 3600 + parts[1] * 60 + parts[2]) * 1000
+    return null
+  }
 
-  if (parts.length === 1) return parts[0] * 1000
-  if (parts.length === 2) return (parts[0] * 60 + parts[1]) * 1000
-  if (parts.length === 3) return (parts[0] * 3600 + parts[1] * 60 + parts[2]) * 1000
+  if (/^\d+$/.test(s)) {
+    if (s.length <= 2) {
+      return parseInt(s, 10) * 1000
+    } else if (s.length <= 4) {
+      const sec = parseInt(s.slice(-2), 10)
+      const min = parseInt(s.slice(0, -2), 10)
+      if (sec >= 60) return null
+      return (min * 60 + sec) * 1000
+    } else {
+      const sec = parseInt(s.slice(-2), 10)
+      const min = parseInt(s.slice(-4, -2), 10)
+      const hr = parseInt(s.slice(0, -4), 10)
+      if (sec >= 60 || min >= 60) return null
+      return (hr * 3600 + min * 60 + sec) * 1000
+    }
+  }
+
   return null
 }
 

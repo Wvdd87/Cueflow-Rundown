@@ -9,6 +9,7 @@ import {
   Ungroup,
   Trash2,
   AlignLeft,
+  Plus,
 } from 'lucide-react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -21,6 +22,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { formatMsToTimeDisplay } from '@/lib/timing'
+import { inlineHtml } from '@/lib/utils'
 import { CF, CUE_COLORS, textOn } from './layout'
 import type { Cue } from '@/lib/supabase/types'
 import type { TimeDisplay } from '@/lib/timing'
@@ -48,6 +50,8 @@ interface GroupHeaderRowProps {
   onUngroup: (id: string) => void
   onDelete: (id: string) => void
   onConvertToCue?: (id: string) => void
+  onAddAbove?: (id: string) => void
+  onAddBelow?: (id: string) => void
 }
 
 const MI = 'gap-2.5 px-3.5 py-2.5 font-cond text-[11px] font-bold uppercase tracking-[0.1em] text-[#c8c9d0] focus:bg-[#16161c] focus:text-[#eef0f3] cursor-pointer'
@@ -67,6 +71,8 @@ export function GroupHeaderRow({
   onUngroup,
   onDelete,
   onConvertToCue,
+  onAddAbove,
+  onAddBelow,
 }: GroupHeaderRowProps) {
   const isGroup = aggregate.count > 0
   const [editing, setEditing] = useState(false)
@@ -84,7 +90,7 @@ export function GroupHeaderRow({
     opacity: isDragging ? 0.5 : 1,
     width: rowWidth,
     minHeight: CF.minRowH,
-    marginTop: isGroup ? 18 : 30,
+    marginTop: isGroup ? 0 : 30,
     marginBottom: CF.gap,
     gap: CF.gap,
     padding: `0 ${CF.rowPad}px`,
@@ -131,7 +137,7 @@ export function GroupHeaderRow({
           {...attributes}
           {...listeners}
           title="Drag to reorder"
-          className="absolute top-[5px] left-1/2 -translate-x-1/2 text-[#5a5c66] hover:text-[#9ba0ab] cursor-grab active:cursor-grabbing opacity-0 group-hover/col1:opacity-100 transition-opacity"
+          className="absolute top-[5px] left-1/2 -translate-x-1/2 text-[#7c7e8a] hover:text-[#eef0f3] cursor-grab active:cursor-grabbing opacity-0 group-hover/col1:opacity-100 transition-opacity"
         >
           <GripVertical className="w-3.5 h-3.5" />
         </button>
@@ -148,6 +154,17 @@ export function GroupHeaderRow({
             <Settings className="w-3.5 h-3.5" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" side="right" className="bg-[#111116] border-[#2e2e38] text-[#c8c9d0] w-[190px] p-0">
+            {onAddAbove && (
+              <DropdownMenuItem onClick={() => onAddAbove(heading.id)} className={MI}>
+                <Plus className="w-3.5 h-3.5 text-[#9ba0ab]" /> Add cue above
+              </DropdownMenuItem>
+            )}
+            {onAddBelow && (
+              <DropdownMenuItem onClick={() => onAddBelow(heading.id)} className={MI}>
+                <Plus className="w-3.5 h-3.5 text-[#9ba0ab]" /> Add cue below
+              </DropdownMenuItem>
+            )}
+            {(onAddAbove || onAddBelow) && <DropdownMenuSeparator className="bg-[#1d1d24]" />}
             {!isGroup && (
               <div className="px-3.5 py-2 border-b border-[#1d1d24]">
                 <p className="font-cond text-[9px] font-bold uppercase tracking-[0.16em] text-[#888b96] mb-2">Background</p>
@@ -238,7 +255,9 @@ export function GroupHeaderRow({
                 fontStyle: heading.title ? 'normal' : 'italic',
               }}
             >
-              {heading.title || (isGroup ? 'New group' : 'Untitled heading')}
+              {heading.title
+                ? <span className="tiptap-cell" dangerouslySetInnerHTML={{ __html: inlineHtml(heading.title) }} />
+                : (isGroup ? 'New group' : 'Untitled heading')}
             </button>
           )}
           {isGroup && (

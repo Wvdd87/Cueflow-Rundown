@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo, useCallback, useEffect, useRef, Fragment } from 'react'
-import { Plus, Heading as HeadingIcon, ChevronDown, ArrowUpToLine } from 'lucide-react'
+import { Plus, Heading as HeadingIcon, ArrowUpToLine } from 'lucide-react'
 import {
   DndContext,
   closestCenter,
@@ -10,6 +10,7 @@ import {
   useSensor,
   useSensors,
   type DragEndEvent,
+  type DragMoveEvent,
 } from '@dnd-kit/core'
 import {
   SortableContext,
@@ -32,15 +33,10 @@ import {
   duplicateCues,
   groupCues,
   ungroupCues,
+  removeFromGroup,
   getRundownCues,
 } from '@/app/actions/cues'
 import { useUndoHistory } from './useUndoHistory'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { RundownHeader } from './RundownHeader'
 import { ColumnHeaders } from './ColumnHeaders'
 import { CueRow } from './CueRow'
@@ -66,7 +62,7 @@ import {
   type TimeDisplay,
 } from '@/lib/timing'
 import { toast } from 'sonner'
-import { cn } from '@/lib/utils'
+import { cn, stripHtml } from '@/lib/utils'
 import type {
   Rundown,
   Cue,
@@ -147,13 +143,25 @@ export function RundownEditor({
   const [hiddenCols, setHiddenCols] = useState<Set<string>>(() => new Set())
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => new Set())
   const [privateNotesIndex, setPrivateNotesIndex] = useState<number>(9999)
+  const [titleIndex, setTitleIndex] = useState<number>(0)
   const [titleWidth, setTitleWidth] = useState<number>(240)
+  const [privateNotesWidth, setPrivateNotesWidth] = useState<number>(210)
+  const [focusCueId, setFocusCueId] = useState<string | null>(null)
   const [hydrated, setHydrated] = useState(false)
   const lastSelectedRef = useRef<string | null>(null)
   const cuesRef = useRef(cues)
   cuesRef.current = cues
+  // Prevents double-submit when add buttons are clicked rapidly
+  const addingRef = useRef(false)
+  // Tracks which half (top/bottom) the dragged item is over during a drag
+  const dragHalfRef = useRef<'top' | 'bottom'>('bottom')
 
   const history = useUndoHistory()
+
+  // Stable ref so the keydown handler never needs to re-register
+  const historyRef = useRef(history)
+  historyRef.current = history
+  const undoExecutingRef = useRef(false)
 
   // Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z keyboard shortcuts
   useEffect(() => {
@@ -162,23 +170,26 @@ export function RundownEditor({
       // Don't intercept while typing in inputs, textareas, or contenteditable
       if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement)?.isContentEditable) return
       if (!e.ctrlKey && !e.metaKey) return
-      if (e.key === 'z' && !e.shiftKey) {
-        e.preventDefault()
-        const label = await history.undo()
-        if (label) toast.success(`Undo: ${label}`)
-      } else if (e.key === 'z' && e.shiftKey) {
-        e.preventDefault()
-        const label = await history.redo()
-        if (label) toast.success(`Redo: ${label}`)
-      } else if (e.key === 'y') {
-        e.preventDefault()
-        const label = await history.redo()
-        if (label) toast.success(`Redo: ${label}`)
+      if (e.key !== 'z' && e.key !== 'y') return
+      e.preventDefault()
+      // Guard: ignore keydown repeats and concurrent async operations
+      if (undoExecutingRef.current) return
+      undoExecutingRef.current = true
+      try {
+        if (e.key === 'z' && !e.shiftKey) {
+          const label = await historyRef.current.undo()
+          if (label) toast.success(`Undo: ${label}`)
+        } else {
+          const label = await historyRef.current.redo()
+          if (label) toast.success(`Redo: ${label}`)
+        }
+      } finally {
+        undoExecutingRef.current = false
       }
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [history])
+  }, [])
 
   // Hydrate per-user view state from localStorage after mount.
   useEffect(() => {
@@ -187,10 +198,18 @@ export function RundownEditor({
     const tw = window.localStorage.getItem(lsKey(rundown.id, 'titleWidth'))
     const twN = tw ? parseInt(tw, 10) : NaN
     if (!isNaN(twN)) setTitleWidth(twN)
+    const pnw = window.localStorage.getItem(lsKey(rundown.id, 'privateNotesWidth'))
+    const pnwN = pnw ? parseInt(pnw, 10) : NaN
+    if (!isNaN(pnwN)) setPrivateNotesWidth(pnwN)
     const pni = window.localStorage.getItem(lsKey(rundown.id, 'privateNotesIndex'))
     if (pni !== null) {
       const n = parseInt(pni, 10)
       if (!isNaN(n)) setPrivateNotesIndex(n)
+    }
+    const ti = window.localStorage.getItem(lsKey(rundown.id, 'titleIndex'))
+    if (ti !== null) {
+      const n = parseInt(ti, 10)
+      if (!isNaN(n)) setTitleIndex(n)
     }
     setHydrated(true)
   }, [rundown.id])
@@ -211,8 +230,16 @@ export function RundownEditor({
   }, [privateNotesIndex, rundown.id, hydrated])
   useEffect(() => {
     if (!hydrated) return
+    window.localStorage.setItem(lsKey(rundown.id, 'titleIndex'), String(titleIndex))
+  }, [titleIndex, rundown.id, hydrated])
+  useEffect(() => {
+    if (!hydrated) return
     window.localStorage.setItem(lsKey(rundown.id, 'titleWidth'), String(titleWidth))
   }, [titleWidth, rundown.id, hydrated])
+  useEffect(() => {
+    if (!hydrated) return
+    window.localStorage.setItem(lsKey(rundown.id, 'privateNotesWidth'), String(privateNotesWidth))
+  }, [privateNotesWidth, rundown.id, hydrated])
 
   const visibleColumns = useMemo(
     () => columns.filter((c) => !hiddenCols.has(c.id)),
@@ -261,7 +288,7 @@ export function RundownEditor({
         rundownSettings.cue_number_start,
         rundownSettings.cue_number_digits
       ),
-      title: c.title ?? '',
+      title: stripHtml(c.title ?? ''),
       cue_type: c.cue_type as 'cue' | 'heading',
     }))
   , [layout, rundownSettings])
@@ -404,6 +431,8 @@ export function RundownEditor({
 
   // --- Add cue ---
   async function handleAddCue() {
+    if (addingRef.current) return
+    addingRef.current = true
     const maxPos = cues.reduce((m, c) => Math.max(m, c.position), -1)
     const optimisticCue: Cue = {
       id: `temp-${Date.now()}`,
@@ -425,28 +454,37 @@ export function RundownEditor({
       deleted_at: null,
     }
     setCues((prev) => [...prev, optimisticCue])
-    const result = await addCue(rundown.id, maxPos)
-    if (result.error) {
-      toast.error(result.error)
-      setCues((prev) => prev.filter((c) => c.id !== optimisticCue.id))
-    } else if (result.cue) {
-      const realCue = result.cue
-      setCues((prev) => prev.map((c) => (c.id === optimisticCue.id ? realCue : c)))
-      history.push({
-        label: 'Add cue',
-        undo: async () => {
-          setCues((prev) => prev.filter((c) => c.id !== realCue.id))
-          await deleteCue(realCue.id, rundown.id)
-        },
-        redo: async () => {
-          await restoreCue(realCue.id, rundown.id)
-          await refreshCues()
-        },
-      })
+    setFocusCueId(optimisticCue.id)
+    try {
+      const result = await addCue(rundown.id, maxPos)
+      if (result.error) {
+        toast.error(result.error)
+        setCues((prev) => prev.filter((c) => c.id !== optimisticCue.id))
+        setFocusCueId(null)
+      } else if (result.cue) {
+        const realCue = result.cue
+        setCues((prev) => prev.map((c) => (c.id === optimisticCue.id ? realCue : c)))
+        setFocusCueId(realCue.id)
+        history.push({
+          label: 'Add cue',
+          undo: async () => {
+            setCues((prev) => prev.filter((c) => c.id !== realCue.id))
+            await deleteCue(realCue.id, rundown.id)
+          },
+          redo: async () => {
+            await restoreCue(realCue.id, rundown.id)
+            await refreshCues()
+          },
+        })
+      }
+    } finally {
+      addingRef.current = false
     }
   }
 
   async function handleAddHeading() {
+    if (addingRef.current) return
+    addingRef.current = true
     const maxPos = cues.reduce((m, c) => Math.max(m, c.position), -1)
     const optimisticCue: Cue = {
       id: `temp-${Date.now()}`,
@@ -468,24 +506,31 @@ export function RundownEditor({
       deleted_at: null,
     }
     setCues((prev) => [...prev, optimisticCue])
-    const result = await addHeading(rundown.id, maxPos)
-    if (result.error) {
-      toast.error(result.error)
-      setCues((prev) => prev.filter((c) => c.id !== optimisticCue.id))
-    } else if (result.cue) {
-      const realCue = result.cue
-      setCues((prev) => prev.map((c) => (c.id === optimisticCue.id ? realCue : c)))
-      history.push({
-        label: 'Add heading',
-        undo: async () => {
-          setCues((prev) => prev.filter((c) => c.id !== realCue.id))
-          await deleteCue(realCue.id, rundown.id)
-        },
-        redo: async () => {
-          await restoreCue(realCue.id, rundown.id)
-          await refreshCues()
-        },
-      })
+    setFocusCueId(optimisticCue.id)
+    try {
+      const result = await addHeading(rundown.id, maxPos)
+      if (result.error) {
+        toast.error(result.error)
+        setCues((prev) => prev.filter((c) => c.id !== optimisticCue.id))
+        setFocusCueId(null)
+      } else if (result.cue) {
+        const realCue = result.cue
+        setCues((prev) => prev.map((c) => (c.id === optimisticCue.id ? realCue : c)))
+        setFocusCueId(realCue.id)
+        history.push({
+          label: 'Add heading',
+          undo: async () => {
+            setCues((prev) => prev.filter((c) => c.id !== realCue.id))
+            await deleteCue(realCue.id, rundown.id)
+          },
+          redo: async () => {
+            await restoreCue(realCue.id, rundown.id)
+            await refreshCues()
+          },
+        })
+      }
+    } finally {
+      addingRef.current = false
     }
   }
 
@@ -512,20 +557,71 @@ export function RundownEditor({
   }, [rundown.id, refreshCues])
 
   const handleAddCueAt = useCallback(async (id: string, direction: 'above' | 'below') => {
+    if (addingRef.current) return
+    addingRef.current = true
     const sorted = [...cuesRef.current].sort((a, b) => a.position - b.position)
     const idx = sorted.findIndex((c) => c.id === id)
-    if (idx < 0) return
-    // Create the cue (lands at the end), then renumber every cue to the exact
-    // desired order — robust against the shift_cue_positions RPC's off-by-one
-    // and keeps positions contiguous (no ties).
-    const r = await addCue(rundown.id, sorted.length)
-    if (r.error || !r.cue) { toast.error(r.error ?? 'Failed to add cue'); await refreshCues(); return }
-    const newId = r.cue.id
-    const orderIds = sorted.map((c) => c.id)
-    orderIds.splice(direction === 'above' ? idx : idx + 1, 0, newId)
-    await reorderCues(rundown.id, orderIds)
-    await refreshCues()
-  }, [rundown.id, refreshCues])
+    if (idx < 0) { addingRef.current = false; return }
+    const targetCue = sorted[idx]
+    // Inherit the group_id so cues added inside a group stay inside it (#45)
+    const groupId = targetCue.group_id ?? undefined
+    try {
+      const r = await addCue(rundown.id, sorted.length, groupId)
+      if (r.error || !r.cue) { toast.error(r.error ?? 'Failed to add cue'); return }
+      const newCue = r.cue
+      setFocusCueId(newCue.id)
+      const orderIds = sorted.map((c) => c.id)
+      orderIds.splice(direction === 'above' ? idx : idx + 1, 0, newCue.id)
+      // Optimistic reorder: avoid a refreshCues() roundtrip that can race with Supabase replication
+      setCues(() => orderIds.map((oid, i) => {
+        if (oid === newCue.id) return { ...newCue, position: i }
+        const c = cuesRef.current.find((x) => x.id === oid)
+        return c ? { ...c, position: i } : null
+      }).filter(Boolean) as typeof sorted)
+      await reorderCues(rundown.id, orderIds)
+    } finally {
+      addingRef.current = false
+    }
+  }, [rundown.id, setFocusCueId])
+
+  const handleAddCueAtHeading = useCallback(async (id: string, direction: 'above' | 'below') => {
+    if (direction === 'above') {
+      await handleAddCueAt(id, 'above')
+    } else {
+      // For group headings: add after the last child; for standalone headings: after the heading
+      const groupItem = layout.items.find((item) => item.type === 'group' && item.heading.id === id)
+      if (groupItem && groupItem.type === 'group' && groupItem.children.length > 0) {
+        const lastChild = groupItem.children[groupItem.children.length - 1]
+        await handleAddCueAt(lastChild.id, 'below')
+      } else {
+        await handleAddCueAt(id, 'below')
+      }
+    }
+  }, [handleAddCueAt, layout])
+
+  const handleRemoveFromGroup = useCallback(async (cueId: string) => {
+    const cue = cuesRef.current.find((c) => c.id === cueId)
+    if (!cue?.group_id) return
+    const groupItem = layout.items.find((item) => item.type === 'group' && item.heading.id === cue.group_id)
+    const sorted = [...cuesRef.current].sort((a, b) => a.position - b.position)
+    // Find the last member of the group to insert after it
+    const lastMemberId = groupItem && groupItem.type === 'group' && groupItem.children.length > 0
+      ? groupItem.children[groupItem.children.length - 1].id
+      : cue.group_id
+    const withoutCue = sorted.filter((c) => c.id !== cueId).map((c) => c.id)
+    const insertAfterIdx = withoutCue.findIndex((id) => id === lastMemberId)
+    withoutCue.splice(insertAfterIdx + 1, 0, cueId)
+    // Optimistic update
+    setCues((prev) => {
+      const pm = new Map(withoutCue.map((id, i) => [id, i]))
+      return prev.map((c) => c.id === cueId
+        ? { ...c, group_id: null, position: pm.get(c.id) ?? c.position }
+        : { ...c, position: pm.get(c.id) ?? c.position }
+      )
+    })
+    const r = await removeFromGroup(cueId, rundown.id, withoutCue)
+    if (r.error) { toast.error(r.error); refreshCues() }
+  }, [layout, rundown.id, refreshCues])
 
   const handleDuplicateSingle = useCallback(async (id: string) => {
     const r = await duplicateCues(rundown.id, [id])
@@ -543,7 +639,7 @@ export function RundownEditor({
     })
     if (snap) {
       history.push({
-        label: `Delete "${snap.title || 'Untitled cue'}"`,
+        label: `Delete "${stripHtml(snap.title) || 'Untitled cue'}"`,
         undo: async () => {
           await restoreCue(id, rundown.id)
           await refreshCues()
@@ -686,26 +782,58 @@ export function RundownEditor({
         for (const chId of childrenByHeading.get(id) ?? []) fullOrder.push(chId)
       }
     }
+
+    // Determine group membership change based on drop position
+    const draggedCue = cueById.get(active.id as string)
+    const overCue = cueById.get(over.id as string)
+    let newGroupId = draggedCue?.group_id ?? null
+
+    if (overCue?.cue_type === 'heading') {
+      // Dropped on a heading: bottom half = join group, top half = leave group (place before)
+      newGroupId = dragHalfRef.current === 'bottom' ? overCue.id : null
+    } else if (overCue?.group_id !== undefined) {
+      // Dropped on a regular cue: inherit its group membership
+      newGroupId = overCue.group_id
+    }
+
+    const groupChanged = newGroupId !== (draggedCue?.group_id ?? null)
+
     // Capture old order before mutating
-    const oldFullOrder = cues
-      .slice()
-      .sort((a, b) => a.position - b.position)
-      .map((c) => c.id)
+    const oldFullOrder = cues.slice().sort((a, b) => a.position - b.position).map((c) => c.id)
+    const oldGroupId = draggedCue?.group_id ?? null
     const pm = new Map(fullOrder.map((id, i) => [id, i]))
     const snapshot = cues
-    setCues((cs) => cs.map((c) => ({ ...c, position: pm.get(c.id) ?? c.position })))
+
+    setCues((cs) => cs.map((c) => {
+      if (c.id === active.id) return { ...c, position: pm.get(c.id) ?? c.position, group_id: newGroupId }
+      return { ...c, position: pm.get(c.id) ?? c.position }
+    }))
+
     const r = await reorderCues(rundown.id, fullOrder)
     if (r.error) { toast.error(r.error); setCues(snapshot); return }
+
+    if (groupChanged && draggedCue) {
+      await updateCue(draggedCue.id, rundown.id, { group_id: newGroupId })
+    }
+
     history.push({
       label: 'Reorder cues',
       undo: async () => {
         const pm2 = new Map(oldFullOrder.map((id, i) => [id, i]))
-        setCues((cs) => cs.map((c) => ({ ...c, position: pm2.get(c.id) ?? c.position })))
+        setCues((cs) => cs.map((c) => {
+          if (c.id === active.id) return { ...c, position: pm2.get(c.id) ?? c.position, group_id: oldGroupId }
+          return { ...c, position: pm2.get(c.id) ?? c.position }
+        }))
         await reorderCues(rundown.id, oldFullOrder)
+        if (groupChanged && draggedCue) await updateCue(draggedCue.id, rundown.id, { group_id: oldGroupId })
       },
       redo: async () => {
-        setCues((cs) => cs.map((c) => ({ ...c, position: pm.get(c.id) ?? c.position })))
+        setCues((cs) => cs.map((c) => {
+          if (c.id === active.id) return { ...c, position: pm.get(c.id) ?? c.position, group_id: newGroupId }
+          return { ...c, position: pm.get(c.id) ?? c.position }
+        }))
         await reorderCues(rundown.id, fullOrder)
+        if (groupChanged && draggedCue) await updateCue(draggedCue.id, rundown.id, { group_id: newGroupId })
       },
     })
   }
@@ -719,7 +847,7 @@ export function RundownEditor({
     return { durationMs, startMs, endMs, count: children.length }
   }
 
-  function renderCueRow(cue: CueTimingOutput, rawNumber: string, depth: number) {
+  function renderCueRow(cue: CueTimingOutput, rawNumber: string, depth: number, groupColor?: string | null) {
     const displayNumber = formatCueNumber(
       rawNumber,
       rundownSettings.cue_number_prefix,
@@ -744,6 +872,7 @@ export function RundownEditor({
         onAddAbove={(id) => handleAddCueAt(id, 'above')}
         onAddBelow={(id) => handleAddCueAt(id, 'below')}
         onDuplicate={handleDuplicateSingle}
+        onRemoveFromGroup={handleRemoveFromGroup}
         onCellChange={handleCellChange}
         live={live.isLive}
         isActive={cue.id === live.activeCueId}
@@ -755,16 +884,20 @@ export function RundownEditor({
         privateNote={privateNotes[cue.id] ?? ''}
         onPrivateNoteChange={handlePrivateNoteChange}
         privateNotesIndex={privateNotesIndex}
+        titleIndex={titleIndex}
         isFirst={cue.id === firstCueId}
         nextAutoStart={nextAutoStartOf[cue.id] ?? null}
         onToggleNextAutoStart={() => toggleNextAutoStart(cue.id)}
         titleWidth={titleWidth}
+        groupColor={groupColor}
+        privateNotesWidth={privateNotesWidth}
+        focusTitle={cue.id === focusCueId}
       />
     )
   }
 
   const isEmpty = cues.length === 0
-  const rowWidth = totalRowWidth(titleWidth, visibleColumns.map((c) => c.width))
+  const rowWidth = totalRowWidth(titleWidth, visibleColumns.map((c) => c.width), privateNotesWidth)
 
   return (
     <RundownDataProvider
@@ -802,39 +935,53 @@ export function RundownEditor({
           undoLabel={history.undoLabel}
           redoLabel={history.redoLabel}
           onUndo={async () => {
-            const label = await history.undo()
-            if (label) toast.success(`Undo: ${label}`)
+            if (undoExecutingRef.current) return
+            undoExecutingRef.current = true
+            try {
+              const label = await history.undo()
+              if (label) toast.success(`Undo: ${label}`)
+            } finally {
+              undoExecutingRef.current = false
+            }
           }}
           onRedo={async () => {
-            const label = await history.redo()
-            if (label) toast.success(`Redo: ${label}`)
+            if (undoExecutingRef.current) return
+            undoExecutingRef.current = true
+            try {
+              const label = await history.redo()
+              if (label) toast.success(`Redo: ${label}`)
+            } finally {
+              undoExecutingRef.current = false
+            }
           }}
         />
 
         {live.isLive && <TransportBar live={live} cues={liveCues} />}
 
-        <div className="flex-1 overflow-hidden flex flex-col">
+        {/* flex-1 wrapper is relative so BatchToolbar can float above content without pushing rows */}
+        <div className="flex-1 overflow-hidden relative">
           {selectedIds.size > 0 && (
-            <BatchToolbar
-              count={selectedIds.size}
-              canUngroup={canUngroup}
-              onSelectAll={handleSelectAll}
-              onDuplicate={handleDuplicate}
-              onGroup={handleGroup}
-              onUngroup={handleUngroup}
-              onMove={handleMove}
-              onBackground={handleBatchBackground}
-              onDelete={handleBatchDelete}
-              onClear={handleClearSelection}
-            />
+            <div className="absolute top-0 left-0 right-0 z-50 shadow-[0_4px_20px_rgba(0,0,0,0.55)]">
+              <BatchToolbar
+                count={selectedIds.size}
+                canUngroup={canUngroup}
+                onSelectAll={handleSelectAll}
+                onDuplicate={handleDuplicate}
+                onGroup={handleGroup}
+                onUngroup={handleUngroup}
+                onMove={handleMove}
+                onBackground={handleBatchBackground}
+                onDelete={handleBatchDelete}
+                onClear={handleClearSelection}
+              />
+            </div>
           )}
 
-          {/* Single scroll container — header is sticky so it always aligns with rows,
-              and min-width:max-content keeps horizontal scroll synced */}
+          {/* Single scroll container */}
           <div
             ref={cueScrollRef}
             data-cue-scroll="1"
-            className="flex-1 overflow-auto min-h-0 bg-[#09090d]"
+            className="h-full overflow-auto bg-[#09090d]"
             onClick={(e) => {
               if (e.target === e.currentTarget) setSelectedIds(new Set())
             }}
@@ -854,8 +1001,12 @@ export function RundownEditor({
             onUnhideAll={unhideAllColumns}
             privateNotesIndex={privateNotesIndex}
             onPrivateNotesIndexChange={setPrivateNotesIndex}
+            titleIndex={titleIndex}
+            onTitleIndexChange={setTitleIndex}
             titleWidth={titleWidth}
             onTitleWidthChange={setTitleWidth}
+            privateNotesWidth={privateNotesWidth}
+            onPrivateNotesWidthChange={setPrivateNotesWidth}
           />
           </div>
 
@@ -869,6 +1020,14 @@ export function RundownEditor({
               id="cue-rows-dnd"
               sensors={sensors}
               collisionDetection={closestCenter}
+              onDragMove={(event: DragMoveEvent) => {
+                const { active, over } = event
+                if (!over || !active.rect.current.translated) return
+                const overRect = over.rect
+                const activeMidY = active.rect.current.translated.top + active.rect.current.translated.height / 2
+                const overMidY = overRect.top + overRect.height / 2
+                dragHalfRef.current = activeMidY < overMidY ? 'top' : 'bottom'
+              }}
               onDragEnd={handleDragEnd}
               modifiers={[restrictToVerticalAxis]}
             >
@@ -893,12 +1052,14 @@ export function RundownEditor({
                           onUngroup={handleUngroupOne}
                           onDelete={handleDeleteGroup}
                           onConvertToCue={handleConvertToCue}
+                          onAddAbove={(id) => handleAddCueAtHeading(id, 'above')}
+                          onAddBelow={(id) => handleAddCueAtHeading(id, 'below')}
                         />
                         {!collapsed &&
                           item.children.map((ch) => {
                             const timed = timedMap[ch.id]
                             return timed
-                              ? renderCueRow(timed, layout.numberOf[ch.id] ?? '', 1)
+                              ? renderCueRow(timed, layout.numberOf[ch.id] ?? '', 1, item.heading.background_color)
                               : null
                           })}
                       </Fragment>
@@ -934,36 +1095,24 @@ export function RundownEditor({
                   </div>
                 </div>
               ) : (
-                <DropdownMenu>
-                  <DropdownMenuTrigger
-                    render={
-                      <button
-                        data-testid="add-cue-dropdown-trigger"
-                        className="inline-flex items-center gap-2 h-[34px] px-4 font-cond text-[10px] font-bold uppercase tracking-[0.14em] bg-transparent text-[#888b96] hover:text-[#c8c9d0] border border-dashed border-[#2e2e38] hover:border-[#3a3a48] transition-colors"
-                      />
-                    }
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleAddCue}
+                    data-testid="add-cue-btn"
+                    className="inline-flex items-center gap-2 h-[34px] px-4 font-cond text-[10px] font-bold uppercase tracking-[0.14em] text-[#888b96] hover:text-[#c8c9d0] border border-dashed border-[#2e2e38] hover:border-[#3a3a48] transition-colors"
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    Add
-                    <ChevronDown className="w-3 h-3" />
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" className="bg-[#111116] border-[#2e2e38] text-[#c8c9d0] w-44 p-0">
-                    <DropdownMenuItem
-                      onClick={handleAddCue}
-                      data-testid="add-cue-menu-item"
-                      className="gap-2.5 px-3.5 py-2.5 font-cond text-[11px] font-bold uppercase tracking-[0.1em] focus:bg-[#16161c] focus:text-[#eef0f3] cursor-pointer"
-                    >
-                      <Plus className="w-3.5 h-3.5 text-[#9ba0ab]" /> Add cue
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={handleAddHeading}
-                      data-testid="add-heading-menu-item"
-                      className="gap-2.5 px-3.5 py-2.5 font-cond text-[11px] font-bold uppercase tracking-[0.1em] focus:bg-[#16161c] focus:text-[#eef0f3] cursor-pointer border-t border-[#1d1d24]"
-                    >
-                      <HeadingIcon className="w-3.5 h-3.5 text-[#9ba0ab]" /> Add heading
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                    Add cue
+                  </button>
+                  <button
+                    onClick={handleAddHeading}
+                    data-testid="add-heading-btn"
+                    className="inline-flex items-center gap-2 h-[34px] px-4 font-cond text-[10px] font-bold uppercase tracking-[0.14em] text-[#888b96] hover:text-[#c8c9d0] border border-dashed border-[#2e2e38] hover:border-[#3a3a48] transition-colors"
+                  >
+                    <HeadingIcon className="w-3.5 h-3.5" />
+                    Add heading
+                  </button>
+                </div>
               )}
             </div>
 

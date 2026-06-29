@@ -64,6 +64,9 @@ export function BatchToolbar({
       <button data-testid="batch-select-all" onClick={onSelectAll} className={ITEM}>
         <CheckSquare className="w-[11px] h-[11px]" /> Select all
       </button>
+      <button data-testid="batch-clear" onClick={onClear} className={ITEM}>
+        <X className="w-[11px] h-[11px]" /> Unselect all
+      </button>
       <button data-testid="batch-duplicate" onClick={onDuplicate} className={ITEM}>
         <Copy className="w-[11px] h-[11px]" /> Duplicate
       </button>
@@ -146,13 +149,6 @@ export function BatchToolbar({
         <Trash2 className="w-[11px] h-[11px]" /> Delete
       </button>
 
-      <button
-        data-testid="batch-clear"
-        onClick={onClear}
-        className={cn(ITEM, 'ml-auto text-[#9ba0ab]')}
-      >
-        <X className="w-[11px] h-[11px]" /> Clear selection
-      </button>
     </div>
   )
 }
