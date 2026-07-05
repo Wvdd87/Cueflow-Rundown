@@ -305,6 +305,29 @@ export function RundownEditor({
   )
   const live = useLiveShow(liveCues)
 
+  // Live transport keyboard shortcuts: Space / ArrowDown = next cue, ArrowUp = previous.
+  // Stable ref so the keydown handler never needs to re-register.
+  const liveRef = useRef(live)
+  liveRef.current = live
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (!liveRef.current.isLive) return
+      if (e.key !== ' ' && e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return
+      if (e.ctrlKey || e.metaKey || e.altKey) return
+      const el = e.target as HTMLElement | null
+      const tag = el?.tagName
+      // Don't intercept while typing in inputs, textareas, or contenteditable
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el?.isContentEditable) return
+      e.preventDefault()
+      // Holding a key down shouldn't rapid-fire through the rundown
+      if (e.repeat) return
+      if (e.key === 'ArrowUp') liveRef.current.prev()
+      else liveRef.current.next()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [])
+
   // ── "Jump to current cue" pill: appears when the operator scrolls the live
   // cue out of view (to check something elsewhere in the rundown). ───────────
   const cueScrollRef = useRef<HTMLDivElement>(null)
