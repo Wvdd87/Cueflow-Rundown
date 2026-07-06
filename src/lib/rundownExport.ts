@@ -2,7 +2,6 @@ import { buildCueLayout } from '@/components/rundown/cueTree'
 import {
   calculateTimings,
   formatMsToTime,
-  formatDuration,
   type CueTimingOutput,
 } from '@/lib/timing'
 import { cellToPlainText, stripHtml } from '@/lib/cellHtml'
@@ -13,6 +12,10 @@ export { stripHtml }
 export interface ExportRow {
   number: string
   isGroup: boolean
+  /** True for cues nested under a group heading (numbered n.1, n.2, …). */
+  isChild: boolean
+  /** True when the row carries no content (no title, no duration, no cells). */
+  isEmpty: boolean
   start: string
   duration: string
   title: string
@@ -20,9 +23,20 @@ export interface ExportRow {
   cells: string[] // one plain-text value per column, in column order
 }
 
+/** Duration with zero-padded minutes so columns align: "09:00", "35:21", "1:02:15". */
+export function formatExportDuration(ms: number): string {
+  const total = Math.floor(Math.max(0, ms) / 1000)
+  const h = Math.floor(total / 3600)
+  const m = Math.floor((total % 3600) / 60)
+  const mm = String(m).padStart(2, '0')
+  const ss = String(total % 60).padStart(2, '0')
+  return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`
+}
+
 function rowFor(
   cue: Cue,
   number: string,
+  isChild: boolean,
   timedMap: Record<string, CueTimingOutput>,
   columns: Column[],
   cellMap: Record<string, string>,
@@ -30,16 +44,22 @@ function rowFor(
   mentionNameById: Record<string, string>
 ): ExportRow {
   const t = timedMap[cue.id]
+  const title = stripHtml(cue.title) || ''
+  const subtitle = stripHtml(cue.subtitle) || ''
+  const cells = columns.map((col) =>
+    cellToPlainText(cellMap[`${cue.id}:${col.id}`], varMap, col.col_type, mentionNameById)
+  )
   return {
     number,
     isGroup: false,
+    isChild,
+    isEmpty:
+      !title && !subtitle && cue.duration_ms === 0 && cells.every((c) => !c.trim()),
     start: formatMsToTime(t?.calculated_start_ms ?? 0),
-    duration: formatDuration(cue.duration_ms),
-    title: stripHtml(cue.title) || '',
-    subtitle: stripHtml(cue.subtitle) || '',
-    cells: columns.map((col) =>
-      cellToPlainText(cellMap[`${cue.id}:${col.id}`], varMap, col.col_type, mentionNameById)
-    ),
+    duration: formatExportDuration(cue.duration_ms),
+    title,
+    subtitle,
+    cells,
   }
 }
 
@@ -69,24 +89,30 @@ export function buildExportRows(
   const rows: ExportRow[] = []
   for (const item of layout.items) {
     if (item.type === 'group') {
+      const title = stripHtml(item.heading.title) || ''
+      const hasChildren = item.children.length > 0
+      // A heading is a section divider — wall-clock start/duration only make
+      // sense when it wraps children (section total); otherwise leave blank.
       const dur = item.children.reduce((s, c) => s + c.duration_ms, 0)
-      const startMs = item.children.length
+      const startMs = hasChildren
         ? timedMap[item.children[0].id]?.calculated_start_ms ?? 0
         : 0
       rows.push({
         number: item.number,
         isGroup: true,
-        start: formatMsToTime(startMs),
-        duration: formatDuration(dur),
-        title: stripHtml(item.heading.title) || 'Group',
+        isChild: false,
+        isEmpty: !title && !hasChildren,
+        start: hasChildren ? formatMsToTime(startMs) : '',
+        duration: hasChildren ? formatExportDuration(dur) : '',
+        title: title || (hasChildren ? 'Group' : ''),
         subtitle: '',
         cells: columns.map(() => ''),
       })
       for (const ch of item.children) {
-        rows.push(rowFor(ch, layout.numberOf[ch.id] ?? '', timedMap, columns, cellMap, varMap, mentionNameById))
+        rows.push(rowFor(ch, layout.numberOf[ch.id] ?? '', true, timedMap, columns, cellMap, varMap, mentionNameById))
       }
     } else {
-      rows.push(rowFor(item.cue, item.number, timedMap, columns, cellMap, varMap, mentionNameById))
+      rows.push(rowFor(item.cue, item.number, false, timedMap, columns, cellMap, varMap, mentionNameById))
     }
   }
   return rows
