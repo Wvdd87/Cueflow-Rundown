@@ -16,6 +16,8 @@ export interface ExportRow {
   isChild: boolean
   /** True when the row carries no content (no title, no duration, no cells). */
   isEmpty: boolean
+  /** Row colour from the app's CUE_COLORS palette (hex), null = uncoloured. */
+  color: string | null
   start: string
   duration: string
   title: string
@@ -55,6 +57,7 @@ function rowFor(
     isChild,
     isEmpty:
       !title && !subtitle && cue.duration_ms === 0 && cells.every((c) => !c.trim()),
+    color: cue.background_color ?? null,
     start: formatMsToTime(t?.calculated_start_ms ?? 0),
     duration: formatExportDuration(cue.duration_ms),
     title,
@@ -102,6 +105,7 @@ export function buildExportRows(
         isGroup: true,
         isChild: false,
         isEmpty: !title && !hasChildren,
+        color: item.heading.background_color ?? null,
         start: hasChildren ? formatMsToTime(startMs) : '',
         duration: hasChildren ? formatExportDuration(dur) : '',
         title: title || (hasChildren ? 'Group' : ''),

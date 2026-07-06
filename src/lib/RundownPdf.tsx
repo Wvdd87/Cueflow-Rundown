@@ -24,6 +24,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     borderBottomWidth: 1,
     borderBottomColor: '#18181b',
+    borderLeftWidth: 3,
+    borderLeftColor: '#ffffff',
+    paddingLeft: 4,
     paddingBottom: 3,
     fontFamily: 'Helvetica-Bold',
     fontSize: 6.5,
@@ -40,7 +43,9 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     paddingHorizontal: 6,
     marginTop: 10,
+    marginBottom: 4,
     borderRadius: 2,
+    borderLeftWidth: 3,
   },
   sectionNum: {
     fontFamily: 'Helvetica-Bold',
@@ -55,22 +60,24 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     color: '#fafafa',
     flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 0,
     paddingRight: 8,
   },
-  sectionMeta: { fontSize: 7.5, color: '#d4d4d8' },
+  sectionMeta: { fontSize: 7.5, color: '#d4d4d8', flexShrink: 0 },
 
   row: {
     flexDirection: 'row',
     borderBottomWidth: 0.5,
     borderBottomColor: '#e4e4e7',
+    borderLeftWidth: 3,
+    paddingLeft: 4,
     paddingVertical: 4,
     alignItems: 'flex-start',
   },
   childRowPad: { paddingVertical: 2.5 },
 
-  num: { width: 36, paddingRight: 4 },
-  numMain: { fontFamily: 'Helvetica-Bold' },
-  numChild: { paddingLeft: 8, color: '#71717a', fontSize: 7.5 },
+  num: { width: 36, paddingRight: 4, fontFamily: 'Helvetica-Bold' },
   time: { width: 44, paddingRight: 4, color: '#3f3f46' },
   dur: { width: 38, paddingRight: 6, color: '#3f3f46' },
 
@@ -160,7 +167,12 @@ export function RundownPdf({
           r.isGroup ? (
             // Section band. minPresenceAhead keeps it from stranding at a page
             // bottom without at least its first child row beneath it.
-            <View key={i} style={styles.section} wrap={false} minPresenceAhead={44}>
+            <View
+              key={i}
+              style={[styles.section, { borderLeftColor: r.color ?? '#18181b' }]}
+              wrap={false}
+              minPresenceAhead={44}
+            >
               {r.number ? <Text style={styles.sectionNum}>{r.number}</Text> : null}
               <Text style={styles.sectionTitle}>{r.title}</Text>
               {r.duration ? (
@@ -172,12 +184,14 @@ export function RundownPdf({
           ) : (
             <View
               key={i}
-              style={r.isChild ? [styles.row, styles.childRowPad] : styles.row}
+              style={[
+                styles.row,
+                ...(r.isChild ? [styles.childRowPad] : []),
+                { borderLeftColor: r.color ?? '#ffffff' },
+              ]}
               wrap={false}
             >
-              <Text style={r.isChild ? [styles.num, styles.numChild] : [styles.num, styles.numMain]}>
-                {r.number}
-              </Text>
+              <Text style={styles.num}>{r.number}</Text>
               <Text style={styles.time}>{r.start}</Text>
               <Text style={styles.dur}>{r.duration}</Text>
               <View style={r.isChild ? [styles.titleCol, styles.titleColChild] : styles.titleCol}>
