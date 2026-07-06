@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { createPortal } from 'react-dom'
+import Image from 'next/image'
 import { buildCueLayout, formatCueNumber } from '@/components/rundown/cueTree'
 import { useLiveSubscription, type LiveSyncState } from '@/components/rundown/liveSync'
 import {
@@ -378,14 +379,7 @@ export function SharedRundownView({
   return (
     <div className="h-screen flex flex-col bg-[#09090d] text-[#c8c9d0] font-sans">
       <header className="shrink-0 flex items-center gap-3 px-6 h-14 border-b border-[#1d1d24] bg-[#07070a]">
-        <div className="w-[30px] h-[30px] bg-[#f0a838] flex items-center justify-center shrink-0">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#06060a" strokeWidth="2.5" strokeLinecap="square">
-            <line x1="7" y1="6" x2="20" y2="6" /><line x1="7" y1="12" x2="20" y2="12" /><line x1="7" y1="18" x2="20" y2="18" />
-            <line x1="3" y1="6" x2="3" y2="6" strokeLinecap="round" strokeWidth="3.2" />
-            <line x1="3" y1="12" x2="3" y2="12" strokeLinecap="round" strokeWidth="3.2" />
-            <line x1="3" y1="18" x2="3" y2="18" strokeLinecap="round" strokeWidth="3.2" />
-          </svg>
-        </div>
+        <Image src="/icon-512.png" alt="Cueflow" width={30} height={30} className="shrink-0" />
         <h1 className="font-semibold text-[15px] text-[#eef0f3] truncate">{rundown.name}</h1>
         <StatusBadge status={rundown.status} />
         {live.status === 'running' && (

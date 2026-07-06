@@ -1,3 +1,4 @@
+import Image from 'next/image'
 import { createClient } from '@/lib/supabase/server'
 import { DashboardTabs } from '@/components/dashboard/DashboardTabs'
 import { CreateEventDialog } from '@/components/dashboard/CreateEventDialog'
@@ -67,16 +68,7 @@ export default async function DashboardPage() {
     <div className="min-h-full bg-[#09090d]">
       {/* Top header */}
       <header className="h-14 flex items-center gap-3.5 px-6 bg-[#07070a] border-b border-[#1d1d24]">
-        <div className="w-[30px] h-[30px] bg-[#f0a838] flex items-center justify-center shrink-0">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#06060a" strokeWidth="2.5" strokeLinecap="square">
-            <line x1="7" y1="6" x2="20" y2="6" />
-            <line x1="7" y1="12" x2="20" y2="12" />
-            <line x1="7" y1="18" x2="20" y2="18" />
-            <line x1="3" y1="6" x2="3" y2="6" strokeLinecap="round" strokeWidth="3.2" />
-            <line x1="3" y1="12" x2="3" y2="12" strokeLinecap="round" strokeWidth="3.2" />
-            <line x1="3" y1="18" x2="3" y2="18" strokeLinecap="round" strokeWidth="3.2" />
-          </svg>
-        </div>
+        <Image src="/icon-512.png" alt="Cueflow" width={30} height={30} className="shrink-0" />
         <span className="font-cond text-sm font-bold uppercase tracking-[0.08em] text-[#eef0f3]">Cueflow</span>
         <div className="w-px h-5 bg-[#22222a]" />
         <span className="text-[13px] text-[#9ba0ab] truncate">{teamName}</span>

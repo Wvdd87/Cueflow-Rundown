@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import {
   Play,
   ChevronDown,
@@ -136,20 +137,13 @@ export function RundownHeader({
 
   return (
     <header className="flex items-center gap-3 px-5 h-14 border-b border-[#1d1d24] bg-[#07070a] shrink-0">
-      {/* Amber logo / back-to-dashboard */}
+      {/* Logo / back-to-dashboard */}
       <Link
         href="/dashboard"
         title="Back to dashboard"
-        className="w-[30px] h-[30px] bg-[#f0a838] hover:bg-[#ffba50] flex items-center justify-center shrink-0 transition-colors"
+        className="shrink-0 transition-[filter] hover:brightness-110"
       >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#06060a" strokeWidth="2.5" strokeLinecap="square">
-          <line x1="7" y1="6" x2="20" y2="6" />
-          <line x1="7" y1="12" x2="20" y2="12" />
-          <line x1="7" y1="18" x2="20" y2="18" />
-          <line x1="3" y1="6" x2="3" y2="6" strokeLinecap="round" strokeWidth="3.2" />
-          <line x1="3" y1="12" x2="3" y2="12" strokeLinecap="round" strokeWidth="3.2" />
-          <line x1="3" y1="18" x2="3" y2="18" strokeLinecap="round" strokeWidth="3.2" />
-        </svg>
+        <Image src="/icon-512.png" alt="Back to dashboard" width={30} height={30} />
       </Link>
 
       {/* Editable rundown name */}
