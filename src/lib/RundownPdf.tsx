@@ -8,6 +8,11 @@ import {
 import type { ExportRow } from './rundownExport'
 import type { Column } from './supabase/types'
 
+// Left-border colour for cues with no assigned colour. Deliberately a light
+// neutral so it can't be mistaken for the palette's own dark gray (#3f3f46)
+// or any other category colour.
+const NEUTRAL_BORDER = '#d4d4d8'
+
 const styles = StyleSheet.create({
   page: {
     paddingTop: 28,
@@ -187,7 +192,7 @@ export function RundownPdf({
               style={[
                 styles.row,
                 ...(r.isChild ? [styles.childRowPad] : []),
-                { borderLeftColor: r.color ?? '#ffffff' },
+                { borderLeftColor: r.color ?? NEUTRAL_BORDER },
               ]}
               wrap={false}
             >
