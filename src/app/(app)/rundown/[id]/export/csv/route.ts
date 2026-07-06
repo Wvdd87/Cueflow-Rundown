@@ -24,8 +24,8 @@ export async function GET(
   const rundown = rundownData as Rundown
 
   const [{ data: cuesData }, { data: colsData }, { data: varsData }, { data: mentionsData }] = await Promise.all([
-    supabase.from('cues').select('*').eq('rundown_id', id).order('position'),
-    supabase.from('columns').select('*').eq('rundown_id', id).order('position'),
+    supabase.from('cues').select('*').eq('rundown_id', id).is('deleted_at', null).order('position'),
+    supabase.from('columns').select('*').eq('rundown_id', id).is('deleted_at', null).order('position'),
     supabase.from('variables').select('*').eq('rundown_id', id),
     supabase.from('mentions').select('*').eq('rundown_id', id),
   ])
