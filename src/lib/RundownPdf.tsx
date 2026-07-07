@@ -41,23 +41,29 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
   },
 
+  // Section bands share the cue rows' fixed column grid (#/Start/Dur boxes are
+  // always rendered, empty or not) so TITLE starts at the same x on every row.
   section: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#18181b',
     paddingVertical: 5,
-    paddingHorizontal: 6,
+    paddingLeft: 4,
+    paddingRight: 6,
     marginTop: 10,
     marginBottom: 4,
     borderRadius: 2,
     borderLeftWidth: 3,
   },
   sectionNum: {
+    width: 36,
+    paddingRight: 4,
     fontFamily: 'Helvetica-Bold',
     fontSize: 9,
     color: '#a1a1aa',
-    marginRight: 6,
   },
+  sectionTime: { width: 44, paddingRight: 4, fontSize: 7.5, color: '#d4d4d8' },
+  sectionDur: { width: 38, paddingRight: 6, fontSize: 7.5, color: '#d4d4d8' },
   sectionTitle: {
     fontFamily: 'Helvetica-Bold',
     fontSize: 9,
@@ -69,7 +75,6 @@ const styles = StyleSheet.create({
     flexBasis: 0,
     paddingRight: 8,
   },
-  sectionMeta: { fontSize: 7.5, color: '#d4d4d8', flexShrink: 0 },
 
   row: {
     flexDirection: 'row',
@@ -87,7 +92,6 @@ const styles = StyleSheet.create({
   dur: { width: 38, paddingRight: 6, color: '#3f3f46' },
 
   titleCol: { flexGrow: 1.4, flexBasis: 120, paddingRight: 8 },
-  titleColChild: { paddingLeft: 8 },
   cueTitle: { fontFamily: 'Helvetica-Bold' },
   sub: { color: '#71717a', fontSize: 7, marginTop: 1 },
 
@@ -178,13 +182,10 @@ export function RundownPdf({
               wrap={false}
               minPresenceAhead={44}
             >
-              {r.number ? <Text style={styles.sectionNum}>{r.number}</Text> : null}
+              <Text style={styles.sectionNum}>{r.number}</Text>
+              <Text style={styles.sectionTime}>{r.start}</Text>
+              <Text style={styles.sectionDur}>{r.duration}</Text>
               <Text style={styles.sectionTitle}>{r.title}</Text>
-              {r.duration ? (
-                <Text style={styles.sectionMeta}>
-                  {r.start} · {r.duration} total
-                </Text>
-              ) : null}
             </View>
           ) : (
             <View
@@ -199,7 +200,7 @@ export function RundownPdf({
               <Text style={styles.num}>{r.number}</Text>
               <Text style={styles.time}>{r.start}</Text>
               <Text style={styles.dur}>{r.duration}</Text>
-              <View style={r.isChild ? [styles.titleCol, styles.titleColChild] : styles.titleCol}>
+              <View style={styles.titleCol}>
                 <Text style={r.isChild ? undefined : styles.cueTitle}>{r.title}</Text>
                 {r.subtitle ? <Text style={styles.sub}>{r.subtitle}</Text> : null}
               </View>
