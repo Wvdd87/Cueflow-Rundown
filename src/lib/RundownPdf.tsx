@@ -132,19 +132,28 @@ function printableColor(c: string | undefined): string | undefined {
 }
 
 function segmentStyle(s: RichSegment, baseBold: boolean) {
-  const bold = baseBold || s.bold
-  const st: Record<string, string> = {
+  // The editor's HeadingSize mark renders 1.25×/1.05×/0.9× the base size, all
+  // bold, with level 3 uppercase — mirror that against the 8pt body size.
+  const bold = baseBold || s.bold || !!s.hsize
+  const st: Style = {
     fontFamily:
       bold && s.italic ? 'Helvetica-BoldOblique'
       : bold ? 'Helvetica-Bold'
       : s.italic ? 'Helvetica-Oblique'
       : 'Helvetica',
   }
+  if (s.hsize) {
+    st.fontSize = s.hsize === 1 ? 10 : s.hsize === 2 ? 8.5 : 7.2
+    if (s.hsize === 3) {
+      st.textTransform = 'uppercase'
+      st.letterSpacing = 0.4
+    }
+  }
   const deco = [
     (s.underline || s.link) && 'underline',
     s.strike && 'line-through',
   ].filter(Boolean)
-  if (deco.length) st.textDecoration = deco.join(' ')
+  if (deco.length) st.textDecoration = deco.join(' ') as Style['textDecoration']
   const color = s.link ? '#2563eb' : printableColor(s.color)
   if (color) st.color = color
   const highlight = printableColor(s.highlight) ?? s.highlight

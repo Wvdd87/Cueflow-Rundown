@@ -45,6 +45,8 @@ export interface RichSegment {
   link?: string
   color?: string
   highlight?: string
+  /** Inline heading level 1–3 from the editor's HeadingSize mark (span[data-hs]). */
+  hsize?: number
 }
 
 export interface RichLine {
@@ -78,6 +80,7 @@ export function parseRichHtml(html: string | null | undefined): RichLine[] {
   const links: string[] = []
   const colors: string[] = []
   const highlights: string[] = []
+  const hsizes: (number | undefined)[] = []
   const listStack: { type: 'ul' | 'ol'; count: number }[] = []
   let pendingMarker: string | undefined
   let headingLevel = 0
@@ -157,8 +160,14 @@ export function parseRichHtml(html: string | null | undefined): RichLine[] {
           else highlights.push(tok.match(/background-color:\s*([^;"']+)/i)?.[1]?.trim() ?? '#fde047')
           break
         case 'span':
-          if (isClose) colors.pop()
-          else colors.push(tok.match(/(?:^|[;"\s])color:\s*([^;"']+)/i)?.[1]?.trim() ?? '')
+          if (isClose) {
+            colors.pop()
+            hsizes.pop()
+          } else {
+            colors.push(tok.match(/(?:^|[;"\s])color:\s*([^;"']+)/i)?.[1]?.trim() ?? '')
+            const hs = tok.match(/data-hs="([1-3])"/i)
+            hsizes.push(hs ? Number(hs[1]) : undefined)
+          }
           break
       }
     } else {
@@ -174,6 +183,7 @@ export function parseRichHtml(html: string | null | undefined): RichLine[] {
         link: links[links.length - 1] || undefined,
         color: colors.filter(Boolean).pop() || undefined,
         highlight: highlights[highlights.length - 1] || undefined,
+        hsize: [...hsizes].reverse().find((v) => v !== undefined),
       })
     }
   }
