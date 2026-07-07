@@ -31,6 +31,172 @@ export function stripHtml(html: string | null | undefined): string {
     .trim()
 }
 
+// ── Rich-text parsing for exports ──
+// TipTap stores cue titles/subtitles/cells as HTML. For the PDF export we
+// parse that HTML into styled line/segment structures so formatting (bold,
+// italic, lists, colours…) survives instead of being flattened to plain text.
+
+export interface RichSegment {
+  text: string
+  bold?: boolean
+  italic?: boolean
+  underline?: boolean
+  strike?: boolean
+  link?: string
+  color?: string
+  highlight?: string
+}
+
+export interface RichLine {
+  segments: RichSegment[]
+  /** List marker rendered before the line ("•", "1.", …). */
+  marker?: string
+  /** Nesting depth for nested lists (0 = top level). */
+  indent: number
+  /** Heading level 1–3 when the line came from <h1>–<h3>. */
+  heading?: number
+}
+
+function decodeEntities(s: string): string {
+  return s
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, '&')
+}
+
+/** Parse well-formed TipTap HTML into styled lines. Tag-soup safe enough for
+ *  editor output; unknown tags are ignored and only their text is kept. */
+export function parseRichHtml(html: string | null | undefined): RichLine[] {
+  if (!html) return []
+  const tokens = html.match(/<[^>]+>|[^<]+/g) ?? []
+  const lines: RichLine[] = []
+  let current: RichLine | null = null
+  const style = { bold: 0, italic: 0, underline: 0, strike: 0 }
+  const links: string[] = []
+  const colors: string[] = []
+  const highlights: string[] = []
+  const listStack: { type: 'ul' | 'ol'; count: number }[] = []
+  let pendingMarker: string | undefined
+  let headingLevel = 0
+
+  const ensureLine = () => {
+    if (!current) {
+      current = {
+        segments: [],
+        marker: pendingMarker,
+        indent: Math.max(0, listStack.length - 1),
+        heading: headingLevel || undefined,
+      }
+      pendingMarker = undefined
+      lines.push(current)
+    }
+  }
+  const endLine = () => {
+    current = null
+  }
+
+  for (const tok of tokens) {
+    if (tok[0] === '<') {
+      const isClose = tok[1] === '/'
+      const name = tok.replace(/^<\/?\s*([a-zA-Z0-9]+)[\s\S]*$/, '$1').toLowerCase()
+      switch (name) {
+        case 'p':
+        case 'div':
+        case 'br':
+          endLine()
+          break
+        case 'h1':
+        case 'h2':
+        case 'h3':
+          endLine()
+          headingLevel = isClose ? 0 : Number(name[1])
+          break
+        case 'ul':
+        case 'ol':
+          if (isClose) listStack.pop()
+          else listStack.push({ type: name, count: 0 })
+          endLine()
+          break
+        case 'li':
+          endLine()
+          if (!isClose) {
+            const top = listStack[listStack.length - 1]
+            if (top?.type === 'ol') {
+              top.count++
+              pendingMarker = `${top.count}.`
+            } else {
+              pendingMarker = '•'
+            }
+          }
+          break
+        case 'strong':
+        case 'b':
+          style.bold += isClose ? -1 : 1
+          break
+        case 'em':
+        case 'i':
+          style.italic += isClose ? -1 : 1
+          break
+        case 'u':
+          style.underline += isClose ? -1 : 1
+          break
+        case 's':
+        case 'strike':
+        case 'del':
+          style.strike += isClose ? -1 : 1
+          break
+        case 'a':
+          if (isClose) links.pop()
+          else links.push(tok.match(/href="([^"]*)"/i)?.[1] ?? '')
+          break
+        case 'mark':
+          if (isClose) highlights.pop()
+          else highlights.push(tok.match(/background-color:\s*([^;"']+)/i)?.[1]?.trim() ?? '#fde047')
+          break
+        case 'span':
+          if (isClose) colors.pop()
+          else colors.push(tok.match(/(?:^|[;"\s])color:\s*([^;"']+)/i)?.[1]?.trim() ?? '')
+          break
+      }
+    } else {
+      const text = decodeEntities(tok)
+      if (!text || (!text.trim() && !current)) continue
+      ensureLine()
+      current!.segments.push({
+        text,
+        bold: style.bold > 0 || undefined,
+        italic: style.italic > 0 || undefined,
+        underline: style.underline > 0 || undefined,
+        strike: style.strike > 0 || undefined,
+        link: links[links.length - 1] || undefined,
+        color: colors.filter(Boolean).pop() || undefined,
+        highlight: highlights[highlights.length - 1] || undefined,
+      })
+    }
+  }
+
+  return lines.filter((l) => l.segments.some((s) => s.text.trim() !== ''))
+}
+
+/** Rich-line version of cellToPlainText: dropdowns become one plain line,
+ *  rich-text cells keep their formatting with variables/mentions resolved. */
+export function cellToRichLines(
+  raw: string | null | undefined,
+  variableMap: Record<string, string>,
+  colType: string,
+  mentionNameById: Record<string, string> = {},
+): RichLine[] {
+  if (!raw) return []
+  if (colType === 'dropdown') {
+    const v = parseDropdownValues(raw).join(', ')
+    return v ? [{ segments: [{ text: v }], indent: 0 }] : []
+  }
+  return parseRichHtml(resolveMentionsHtml(resolveVariablesHtml(raw, variableMap), mentionNameById))
+}
+
 /** Resolve a cell's stored value to plain text for exports.
  *  Dropdown cells become a comma-joined option list; rich-text cells have their
  *  $-variable and @-mention chips resolved to current values before tags are

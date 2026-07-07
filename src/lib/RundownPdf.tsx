@@ -5,7 +5,9 @@ import {
   Text,
   StyleSheet,
 } from '@react-pdf/renderer'
+import type { Style } from '@react-pdf/types'
 import type { ExportRow } from './rundownExport'
+import type { RichLine, RichSegment } from './cellHtml'
 import type { Column } from './supabase/types'
 
 // Left-border colour for cues with no assigned colour. Deliberately a light
@@ -41,8 +43,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
   },
 
-  // Section bands share the cue rows' fixed column grid (#/Start/Dur boxes are
-  // always rendered, empty or not) so TITLE starts at the same x on every row.
+  // Section bands. Numbered bands (groups acting as parent cues) share the cue
+  // rows' fixed column grid so their TITLE aligns; unnumbered bands are pure
+  // dividers and start flush left.
   section: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -92,13 +95,11 @@ const styles = StyleSheet.create({
   dur: { width: 38, paddingRight: 6, color: '#3f3f46' },
 
   titleCol: { flexGrow: 1.4, flexBasis: 120, paddingRight: 8 },
-  cueTitle: { fontFamily: 'Helvetica-Bold' },
-  sub: { color: '#71717a', fontSize: 7, marginTop: 1 },
+  sub: { color: '#71717a', fontSize: 7 },
 
   col: { flexGrow: 1, flexBasis: 70, paddingRight: 6 },
-  bulletRow: { flexDirection: 'row', marginBottom: 1 },
-  bulletGlyph: { width: 7 },
-  bulletText: { flexGrow: 1, flexShrink: 1 },
+  richLine: { flexDirection: 'row', marginBottom: 1 },
+  richLineText: { flexGrow: 1, flexShrink: 1 },
 
   footer: {
     position: 'absolute',
@@ -112,22 +113,86 @@ const styles = StyleSheet.create({
   },
 })
 
-/** Multi-line cell content; "• " lines render as hanging-indent bullets. */
-function CellContent({ value }: { value: string }) {
-  if (!value) return null
-  const lines = value.split('\n').filter((l) => l.trim() !== '')
+/** Drop stored text colours that would be unreadable on white paper (the app
+ *  editor runs on a dark theme, so near-white text colours are common). */
+function printableColor(c: string | undefined): string | undefined {
+  if (!c) return undefined
+  let r = -1, g = -1, b = -1
+  const hex = c.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i)?.[1]
+  if (hex) {
+    const h = hex.length === 3 ? hex.split('').map((x) => x + x).join('') : hex
+    r = parseInt(h.slice(0, 2), 16); g = parseInt(h.slice(2, 4), 16); b = parseInt(h.slice(4, 6), 16)
+  } else {
+    const m = c.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i)
+    if (m) { r = +m[1]; g = +m[2]; b = +m[3] }
+    else if (/^white$/i.test(c)) return undefined
+  }
+  if (r >= 0 && (r * 299 + g * 587 + b * 114) / 1000 > 215) return undefined
+  return c
+}
+
+function segmentStyle(s: RichSegment, baseBold: boolean) {
+  const bold = baseBold || s.bold
+  const st: Record<string, string> = {
+    fontFamily:
+      bold && s.italic ? 'Helvetica-BoldOblique'
+      : bold ? 'Helvetica-Bold'
+      : s.italic ? 'Helvetica-Oblique'
+      : 'Helvetica',
+  }
+  const deco = [
+    (s.underline || s.link) && 'underline',
+    s.strike && 'line-through',
+  ].filter(Boolean)
+  if (deco.length) st.textDecoration = deco.join(' ')
+  const color = s.link ? '#2563eb' : printableColor(s.color)
+  if (color) st.color = color
+  const highlight = printableColor(s.highlight) ?? s.highlight
+  if (s.highlight && highlight) st.backgroundColor = highlight
+  return st
+}
+
+function headingStyle(level: number | undefined) {
+  if (!level) return undefined
+  return { fontSize: level === 1 ? 10 : level === 2 ? 9 : 8.5 }
+}
+
+/** Rich-text block: styled inline segments, list markers, nested indents. */
+function RichText({
+  lines,
+  baseBold = false,
+  textStyle,
+}: {
+  lines: RichLine[]
+  baseBold?: boolean
+  textStyle?: Style
+}) {
+  if (!lines.length) return null
   return (
     <View>
-      {lines.map((line, i) =>
-        line.startsWith('• ') ? (
-          <View key={i} style={styles.bulletRow}>
-            <Text style={styles.bulletGlyph}>•</Text>
-            <Text style={styles.bulletText}>{line.slice(2)}</Text>
-          </View>
-        ) : (
-          <Text key={i}>{line}</Text>
-        )
-      )}
+      {lines.map((l, i) => (
+        <View
+          key={i}
+          style={
+            l.indent
+              ? [styles.richLine, { paddingLeft: l.indent * 8 }]
+              : styles.richLine
+          }
+        >
+          {l.marker ? (
+            <Text style={[{ width: l.marker === '•' ? 7 : 13 }, textStyle ?? {}]}>
+              {l.marker}
+            </Text>
+          ) : null}
+          <Text style={[styles.richLineText, textStyle ?? {}, headingStyle(l.heading) ?? {}]}>
+            {l.segments.map((s, j) => (
+              <Text key={j} style={segmentStyle(s, baseBold || !!l.heading)}>
+                {s.text}
+              </Text>
+            ))}
+          </Text>
+        </View>
+      ))}
     </View>
   )
 }
@@ -178,13 +243,17 @@ export function RundownPdf({
             // bottom without at least its first child row beneath it.
             <View
               key={i}
-              style={[styles.section, { borderLeftColor: r.color ?? '#18181b' }]}
+              style={[styles.section, { borderLeftColor: r.color ?? NEUTRAL_BORDER }]}
               wrap={false}
               minPresenceAhead={44}
             >
-              <Text style={styles.sectionNum}>{r.number}</Text>
-              <Text style={styles.sectionTime}>{r.start}</Text>
-              <Text style={styles.sectionDur}>{r.duration}</Text>
+              {r.number ? (
+                <>
+                  <Text style={styles.sectionNum}>{r.number}</Text>
+                  <Text style={styles.sectionTime}>{r.start}</Text>
+                  <Text style={styles.sectionDur}>{r.duration}</Text>
+                </>
+              ) : null}
               <Text style={styles.sectionTitle}>{r.title}</Text>
             </View>
           ) : (
@@ -201,12 +270,14 @@ export function RundownPdf({
               <Text style={styles.time}>{r.start}</Text>
               <Text style={styles.dur}>{r.duration}</Text>
               <View style={styles.titleCol}>
-                <Text style={r.isChild ? undefined : styles.cueTitle}>{r.title}</Text>
-                {r.subtitle ? <Text style={styles.sub}>{r.subtitle}</Text> : null}
+                <RichText lines={r.titleRich} baseBold={!r.isChild} />
+                {r.subtitleRich.length ? (
+                  <RichText lines={r.subtitleRich} textStyle={styles.sub} />
+                ) : null}
               </View>
               {colIndexes.map((ci) => (
                 <View key={ci} style={styles.col}>
-                  <CellContent value={r.cells[ci]} />
+                  <RichText lines={r.cellsRich[ci]} />
                 </View>
               ))}
             </View>

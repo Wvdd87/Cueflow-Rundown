@@ -4,10 +4,17 @@ import {
   formatMsToTime,
   type CueTimingOutput,
 } from '@/lib/timing'
-import { cellToPlainText, stripHtml } from '@/lib/cellHtml'
+import {
+  cellToPlainText,
+  cellToRichLines,
+  parseRichHtml,
+  stripHtml,
+  type RichLine,
+} from '@/lib/cellHtml'
 import type { Cue, Column, Cell, Variable, Mention } from '@/lib/supabase/types'
 
 export { stripHtml }
+export type { RichLine, RichSegment } from '@/lib/cellHtml'
 
 export interface ExportRow {
   number: string
@@ -23,6 +30,11 @@ export interface ExportRow {
   title: string
   subtitle: string
   cells: string[] // one plain-text value per column, in column order
+  // Styled variants used by the PDF so rich-text formatting is preserved;
+  // the plain fields above stay as-is for CSV and emptiness checks.
+  titleRich: RichLine[]
+  subtitleRich: RichLine[]
+  cellsRich: RichLine[][]
 }
 
 /** Duration with zero-padded minutes so columns align: "09:00", "35:21", "1:02:15". */
@@ -63,6 +75,11 @@ function rowFor(
     title,
     subtitle,
     cells,
+    titleRich: parseRichHtml(cue.title),
+    subtitleRich: parseRichHtml(cue.subtitle),
+    cellsRich: columns.map((col) =>
+      cellToRichLines(cellMap[`${cue.id}:${col.id}`], varMap, col.col_type, mentionNameById)
+    ),
   }
 }
 
@@ -111,6 +128,9 @@ export function buildExportRows(
         title: title || (hasChildren ? 'Group' : ''),
         subtitle: '',
         cells: columns.map(() => ''),
+        titleRich: [],
+        subtitleRich: [],
+        cellsRich: columns.map(() => []),
       })
       for (const ch of item.children) {
         rows.push(rowFor(ch, layout.numberOf[ch.id] ?? '', true, timedMap, columns, cellMap, varMap, mentionNameById))
