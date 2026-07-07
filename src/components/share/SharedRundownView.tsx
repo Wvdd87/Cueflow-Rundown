@@ -16,7 +16,7 @@ import { CF, TITLE_COL_ID, textOn } from '@/components/rundown/layout'
 import { RichNoteCell } from '@/components/rundown/RichNoteCell'
 import { RundownSearch, type SearchCue } from '@/components/rundown/RundownSearch'
 import { StatusBadge } from '@/components/StatusBadge'
-import { cn } from '@/lib/utils'
+import { cn, inlineHtml, stripHtml } from '@/lib/utils'
 import type { Rundown, Column, Cue, Cell, Variable, Mention } from '@/lib/supabase/types'
 import {
   DndContext,
@@ -208,10 +208,10 @@ export function SharedRundownView({
     const out: SearchCue[] = []
     for (const item of layout.items) {
       if (item.type === 'group') {
-        out.push({ id: item.heading.id, displayNumber: fmtNum(item.number, rundown), title: item.heading.title, cue_type: 'heading' })
-        for (const ch of item.children) out.push({ id: ch.id, displayNumber: fmtNum(layout.numberOf[ch.id] ?? '', rundown), title: ch.title, cue_type: 'cue' })
+        out.push({ id: item.heading.id, displayNumber: fmtNum(item.number, rundown), title: stripHtml(item.heading.title), cue_type: 'heading' })
+        for (const ch of item.children) out.push({ id: ch.id, displayNumber: fmtNum(layout.numberOf[ch.id] ?? '', rundown), title: stripHtml(ch.title), cue_type: 'cue' })
       } else {
-        out.push({ id: item.cue.id, displayNumber: fmtNum(item.number, rundown), title: item.cue.title, cue_type: item.cue.cue_type as 'cue' | 'heading' })
+        out.push({ id: item.cue.id, displayNumber: fmtNum(item.number, rundown), title: stripHtml(item.cue.title), cue_type: item.cue.cue_type as 'cue' | 'heading' })
       }
     }
     return out
@@ -676,12 +676,24 @@ function ShareCueRow({
         {/* Left-of-title dynamic cells */}
         {renderLeftCells(cue.id, baseBg)}
 
-        {/* Title + subtitle */}
+        {/* Title + subtitle — stored as TipTap HTML, rendered like the editor */}
         <div className="shrink-0 flex flex-col" data-share-title-col style={{ width: titleWidth, minHeight: CF.minRowH, background: baseBg, padding: '12px 16px' }}>
-          <span className="text-[16px] font-medium leading-[1.35] break-words [overflow-wrap:anywhere]" style={{ color: cue.title ? ct.hi : '#6b6d78', fontStyle: cue.title ? 'normal' : 'italic' }}>
-            {cue.title || 'Untitled cue'}
-          </span>
-          {cue.subtitle && <span className="text-xs mt-0.5 break-words [overflow-wrap:anywhere] leading-[1.3]" style={{ color: ct.mid }}>{cue.subtitle}</span>}
+          {stripHtml(cue.title) ? (
+            <span
+              className="tiptap-cell text-[16px] font-medium leading-[1.35] break-words [overflow-wrap:anywhere]"
+              style={{ color: ct.hi }}
+              dangerouslySetInnerHTML={{ __html: inlineHtml(cue.title) }}
+            />
+          ) : (
+            <span className="text-[16px] font-medium leading-[1.35] italic" style={{ color: '#6b6d78' }}>Untitled cue</span>
+          )}
+          {stripHtml(cue.subtitle ?? '') ? (
+            <span
+              className="tiptap-cell text-xs mt-0.5 break-words [overflow-wrap:anywhere] leading-[1.3]"
+              style={{ color: ct.mid }}
+              dangerouslySetInnerHTML={{ __html: inlineHtml(cue.subtitle ?? '') }}
+            />
+          ) : null}
         </div>
 
         {/* Right-of-title dynamic cells */}
@@ -758,9 +770,17 @@ function ShareGroupHeader({
           <span className="font-mono text-sm font-bold" style={{ color: heading.background_color ? ct.mid : (isGroup ? '#9ba0ab' : '#7c7e8a') }}>{number}</span>
         </div>
         <div className="flex-1 min-w-0 pl-1">
-          <span className="block text-left break-words [overflow-wrap:anywhere]" style={{ fontSize: isGroup ? 14 : 16, fontWeight: isGroup ? 600 : 700, color: heading.title ? (heading.background_color ? ct.hi : '#eef0f3') : '#5a5c66', fontStyle: heading.title ? 'normal' : 'italic' }}>
-            {heading.title || (isGroup ? 'Group' : 'Untitled heading')}
-          </span>
+          {stripHtml(heading.title) ? (
+            <span
+              className="tiptap-cell block text-left break-words [overflow-wrap:anywhere]"
+              style={{ fontSize: isGroup ? 14 : 16, fontWeight: isGroup ? 600 : 700, color: heading.background_color ? ct.hi : '#eef0f3' }}
+              dangerouslySetInnerHTML={{ __html: inlineHtml(heading.title) }}
+            />
+          ) : (
+            <span className="block text-left italic" style={{ fontSize: isGroup ? 14 : 16, fontWeight: isGroup ? 600 : 700, color: '#5a5c66' }}>
+              {isGroup ? 'Group' : 'Untitled heading'}
+            </span>
+          )}
           {isGroup && (
             <div className="flex items-center gap-2.5 mt-0.5 font-mono text-[11px] text-[#888b96]">
               <span>{longDur(durationMs)}</span>
@@ -857,7 +877,7 @@ function ShareColumnHeader({ col, width, onHide, onResizeStart }: ShareColumnHea
 
   return (
     <div ref={setNodeRef} data-share-col={col.id} style={style} className="group/col relative shrink-0 flex items-center pl-1">
-      <button {...attributes} {...listeners} title="Drag to reorder" className="opacity-0 group-hover/col:opacity-100 transition-opacity text-[#5a5c66] hover:text-[#9ba0ab] cursor-grab active:cursor-grabbing mr-0.5">
+      <button {...attributes} {...listeners} title="Drag to reorder" className="text-[#5a5c66] hover:text-[#9ba0ab] transition-colors cursor-grab active:cursor-grabbing mr-0.5">
         <GripVertical className="w-3 h-3" />
       </button>
       <span className={cn('flex-1', LABEL, 'text-[#7c7e8a] truncate')}>{col.name}</span>
@@ -882,7 +902,7 @@ function ShareSortableTitleHeader({ width, onResizeStart }: { width: number; onR
 
   return (
     <div ref={setNodeRef} data-share-title-col style={style} className="group/col relative shrink-0 flex items-center pl-1">
-      <button {...attributes} {...listeners} title="Drag to reorder" className="opacity-0 group-hover/col:opacity-100 transition-opacity text-[#5a5c66] hover:text-[#9ba0ab] cursor-grab active:cursor-grabbing mr-0.5">
+      <button {...attributes} {...listeners} title="Drag to reorder" className="text-[#5a5c66] hover:text-[#9ba0ab] transition-colors cursor-grab active:cursor-grabbing mr-0.5">
         <GripVertical className="w-3 h-3" />
       </button>
       <span className={cn('flex-1', LABEL, 'text-[#7c7e8a] truncate')}>Title</span>
