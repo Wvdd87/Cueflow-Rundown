@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { ChevronDown, ChevronUp, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, Trash2 } from 'lucide-react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { TextStyle, Color } from '@tiptap/extension-text-style'
@@ -75,9 +75,6 @@ function CollapsedScript({
   const preview = scriptCollapsedPreview(block.content)
   return (
     <div className="flex items-center gap-2.5 bg-[#111116] border border-[#1d1d24] px-3 py-2">
-      <button onClick={onExpand} title="Expand script" className="shrink-0 text-[#7c7e8a] hover:text-[#eef0f3] transition-colors">
-        <ChevronDown className="w-3.5 h-3.5" />
-      </button>
       <span className={LABEL + ' shrink-0'}>Script</span>
       <div className="flex-1 min-w-0 text-[12px]" style={{ color: 'rgba(238,240,243,0.55)' }}>
         {preview.first ? (
@@ -89,6 +86,9 @@ function CollapsedScript({
           <p className="italic opacity-70">Empty script</p>
         )}
       </div>
+      <button onClick={onExpand} title="Expand script" className="shrink-0 text-[#7c7e8a] hover:text-[#eef0f3] transition-colors">
+        <ChevronRight className="w-3.5 h-3.5" />
+      </button>
       <button onClick={onDelete} title="Delete script" className="shrink-0 text-[#7c7e8a] hover:text-[#ff5a73] transition-colors">
         <Trash2 className="w-3.5 h-3.5" />
       </button>
@@ -130,7 +130,7 @@ function ExpandedScript({
             {words} word{words === 1 ? '' : 's'}
           </span>
           <button onClick={onCollapse} title="Collapse script" className="text-[#7c7e8a] hover:text-[#eef0f3] transition-colors">
-            <ChevronUp className="w-3.5 h-3.5" />
+            <ChevronDown className="w-3.5 h-3.5" />
           </button>
           <button onClick={onDelete} title="Delete script" className="text-[#7c7e8a] hover:text-[#ff5a73] transition-colors">
             <Trash2 className="w-3.5 h-3.5" />
