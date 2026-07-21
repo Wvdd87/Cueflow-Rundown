@@ -14,6 +14,7 @@ import {
   Plus,
   GripVertical,
   Ungroup,
+  ScrollText,
 } from 'lucide-react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -29,6 +30,7 @@ import { RichTextCell } from './RichTextCell'
 import { InlineTipTap } from './InlineTipTap'
 import { DropdownCell } from './DropdownCell'
 import { PrivateNoteCell } from './PrivateNoteCell'
+import { ScriptDrawer } from './ScriptDrawer'
 import {
   CF,
   CUE_COLORS,
@@ -38,8 +40,9 @@ import {
   PRIVATE_NOTES_ID,
 } from './layout'
 import { formatDuration, parseDurationInput, formatMsToTime, formatMsToTimeDisplay, parseClockInput } from '@/lib/timing'
+import { scriptsWordCount, autoDurationMs } from '@/lib/scripts'
 import { cn, inlineHtml } from '@/lib/utils'
-import type { Cue, Column } from '@/lib/supabase/types'
+import type { Cue, Column, ScriptBlock } from '@/lib/supabase/types'
 import type { CueTimingOutput, TimeDisplay } from '@/lib/timing'
 
 type SelectMods = { shift: boolean; meta: boolean }
@@ -61,6 +64,12 @@ interface CueRowProps {
   onDuplicate: (id: string) => void
   onRemoveFromGroup?: (id: string) => void
   onCellChange: (cueId: string, columnId: string, content: string) => void
+  onAddScript: (id: string) => void
+  onScriptsChange: (id: string, scripts: ScriptBlock[]) => void
+  onDeleteScript: (id: string, scriptId: string) => void
+  onToggleScriptCollapsed: (id: string, scriptId: string) => void
+  onSetDurationMode: (id: string, mode: 'manual' | 'auto') => void
+  focusScriptId?: string | null
   live: boolean
   isActive: boolean
   isNext: boolean
@@ -102,6 +111,12 @@ export function CueRow({
   onDuplicate,
   onRemoveFromGroup,
   onCellChange,
+  onAddScript,
+  onScriptsChange,
+  onDeleteScript,
+  onToggleScriptCollapsed,
+  onSetDurationMode,
+  focusScriptId,
   live,
   isActive,
   isNext,
@@ -170,8 +185,11 @@ export function CueRow({
     setEditingDuration(false)
     const ms = parseDurationInput(durationInput)
     if (ms === null || ms === cue.duration_ms) return
-    onUpdate(cue.id, { duration_ms: ms })
-    await updateCue(cue.id, rundownId, { duration_ms: ms })
+    const updates: Partial<Cue> = { duration_ms: ms }
+    // Editing the duration directly always wins over the script-derived value.
+    if (cue.duration_mode === 'auto') updates.duration_mode = 'manual'
+    onUpdate(cue.id, updates)
+    await updateCue(cue.id, rundownId, updates)
   }
   function saveTitleHtml(html: string) {
     setEditingTitle(false)
@@ -215,6 +233,8 @@ export function CueRow({
   const isHard = cue.start_type === 'hard'
   const hasGap = isHard && cue.gap_ms > 0
   const liveOvertime = liveRemainingMs != null && liveRemainingMs < 0
+  const isAutoDuration = cue.duration_mode === 'auto'
+  const scriptWords = cue.scripts.length > 0 ? scriptsWordCount(cue.scripts) : 0
 
   // ── Block-model colours ──
   const ct = textOn(cue.background_color)
@@ -310,6 +330,9 @@ export function CueRow({
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => onDuplicate(cue.id)} className={MI}>
                 <Copy className="w-3.5 h-3.5 text-[#9ba0ab]" /> Duplicate cue
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onAddScript(cue.id)} data-testid="add-script-menu-item" className={MI}>
+                <ScrollText className="w-3.5 h-3.5 text-[#9ba0ab]" /> Add script
               </DropdownMenuItem>
 
               {/* Background swatches */}
@@ -435,7 +458,7 @@ export function CueRow({
 
         {/* Duration */}
         <div
-          style={tile(CF.dur, { flexDirection: 'column', justifyContent: 'flex-start', alignItems: 'flex-start', gap: 1, cursor: 'text' })}
+          style={tile(CF.dur, { flexDirection: 'column', justifyContent: 'flex-start', alignItems: 'flex-start', gap: 1, cursor: 'text', position: 'relative' })}
           onClick={() => !editingDuration && !(isActive && live) && startDurationEdit()}
         >
           {editingDuration ? (
@@ -457,9 +480,50 @@ export function CueRow({
               </span>
             </>
           ) : (
-            <span className="font-mono text-[15px] font-semibold tabular-nums" style={{ color: ct.hi }}>
-              {formatDuration(cue.duration_ms)}
-            </span>
+            <>
+              <span
+                className="font-mono text-[15px] font-semibold tabular-nums"
+                style={{ color: isAutoDuration ? '#f0a838' : ct.hi, opacity: isAutoDuration ? 0.9 : 1 }}
+              >
+                {formatDuration(cue.duration_ms)}
+              </span>
+              {isAutoDuration && (
+                <span
+                  data-testid="duration-auto-badge"
+                  title={
+                    scriptWords > 0
+                      ? `Auto — from ${scriptWords} script word${scriptWords === 1 ? '' : 's'}`
+                      : 'Auto — scripts are empty, showing last value'
+                  }
+                  className="font-mono text-[8px] font-bold uppercase tracking-wide px-1 py-[1px]"
+                  style={{
+                    color: scriptWords > 0 ? '#f0a838' : '#ff5a73',
+                    border: `1px solid ${scriptWords > 0 ? 'rgba(240,168,56,0.5)' : 'rgba(255,90,115,0.5)'}`,
+                  }}
+                >
+                  Auto
+                </span>
+              )}
+            </>
+          )}
+
+          {/* Manual / Auto duration toggle — only meaningful once the cue has scripts */}
+          {cue.scripts.length > 0 && !editingDuration && !(isActive && live) && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onSetDurationMode(cue.id, isAutoDuration ? 'manual' : 'auto') }}
+              title={isAutoDuration ? 'Switch to manual duration' : 'Switch to auto duration (from script length)'}
+              className={cn(
+                'absolute left-1/2 -translate-x-1/2 -bottom-[13px] z-20 flex items-center justify-center px-1.5 h-[18px] font-mono text-[8px] font-bold uppercase tracking-wide transition-colors',
+                !isAutoDuration && 'opacity-0 group-hover:opacity-100'
+              )}
+              style={{
+                background: '#09090d',
+                border: `1px solid ${isAutoDuration ? 'rgba(240,168,56,0.5)' : '#1d1d24'}`,
+                color: isAutoDuration ? '#f0a838' : '#3a3a48',
+              }}
+            >
+              {isAutoDuration ? 'Auto' : 'Manual'}
+            </button>
           )}
         </div>
 
@@ -536,6 +600,17 @@ export function CueRow({
               Add a subtitle…
             </button>
           )}
+
+          {cue.scripts.length > 0 && (
+            <button
+              onClick={() => onAddScript(cue.id)}
+              title="Add another script block"
+              className="inline-flex items-center gap-1 text-[10px] text-left w-fit mt-1 opacity-0 group-hover/title:opacity-100 transition-opacity"
+              style={{ color: cue.background_color ? ct.mid : '#5a5c66' }}
+            >
+              <Plus className="w-2.5 h-2.5" /> Add script
+            </button>
+          )}
         </div>
 
         {/* Right-of-title dynamic cells + Private Notes */}
@@ -586,6 +661,15 @@ export function CueRow({
           })
         })()}
       </div>
+
+      <ScriptDrawer
+        scripts={cue.scripts}
+        focusScriptId={focusScriptId}
+        indent={labelIndent}
+        onChange={(scripts) => onScriptsChange(cue.id, scripts)}
+        onDelete={(scriptId) => onDeleteScript(cue.id, scriptId)}
+        onToggleCollapsed={(scriptId) => onToggleScriptCollapsed(cue.id, scriptId)}
+      />
     </div>
   )
 }

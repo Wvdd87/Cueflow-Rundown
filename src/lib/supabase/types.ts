@@ -6,6 +6,13 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[]
 
+/** A single script/talent text block attached to a cue (stored in cues.scripts). */
+export interface ScriptBlock {
+  id: string
+  content: string
+  collapsed: boolean
+}
+
 export type Database = {
   public: {
     Tables: {
@@ -198,6 +205,8 @@ export type Database = {
           start_time_override: string | null
           auto_start: boolean
           duration_ms: number
+          duration_mode: 'manual' | 'auto'
+          scripts: ScriptBlock[]
           background_color: string | null
           locked: boolean
           created_at: string
@@ -217,6 +226,8 @@ export type Database = {
           start_time_override?: string | null
           auto_start?: boolean
           duration_ms?: number
+          duration_mode?: 'manual' | 'auto'
+          scripts?: ScriptBlock[]
           background_color?: string | null
           locked?: boolean
           created_at?: string
@@ -234,6 +245,8 @@ export type Database = {
           start_time_override?: string | null
           auto_start?: boolean
           duration_ms?: number
+          duration_mode?: 'manual' | 'auto'
+          scripts?: ScriptBlock[]
           background_color?: string | null
           locked?: boolean
           updated_at?: string

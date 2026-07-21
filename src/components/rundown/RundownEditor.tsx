@@ -61,6 +61,7 @@ import {
   type CueTimingOutput,
   type TimeDisplay,
 } from '@/lib/timing'
+import { newScriptBlock, scriptsWordCount, autoDurationMs } from '@/lib/scripts'
 import { toast } from 'sonner'
 import { cn, stripHtml } from '@/lib/utils'
 import type {
@@ -70,6 +71,7 @@ import type {
   Cell,
   Mention,
   Variable,
+  ScriptBlock,
 } from '@/lib/supabase/types'
 
 interface RundownEditorProps {
@@ -102,6 +104,12 @@ function cellsToMap(cells: Cell[]): Record<string, string> {
   )
 }
 
+// Backfills scripts/duration_mode for cues read before the #54 migration
+// (supabase/schema_phase17.sql) has been applied, so a stale DB can't crash the editor.
+function normalizeCue(c: Cue): Cue {
+  return { ...c, scripts: c.scripts ?? [], duration_mode: c.duration_mode ?? 'manual' }
+}
+
 export function RundownEditor({
   rundown,
   initialCues,
@@ -111,7 +119,7 @@ export function RundownEditor({
   initialVariables,
   initialPrivateNotes,
 }: RundownEditorProps) {
-  const [cues, setCues] = useState<Cue[]>(initialCues)
+  const [cues, setCues] = useState<Cue[]>(() => initialCues.map(normalizeCue))
   const [columns, setColumns] = useState<Column[]>(initialColumns)
   const [cells, setCells] = useState<Record<string, string>>(() =>
     cellsToMap(initialCells)
@@ -147,6 +155,7 @@ export function RundownEditor({
   const [titleWidth, setTitleWidth] = useState<number>(240)
   const [privateNotesWidth, setPrivateNotesWidth] = useState<number>(210)
   const [focusCueId, setFocusCueId] = useState<string | null>(null)
+  const [focusScriptId, setFocusScriptId] = useState<string | null>(null)
   const [hydrated, setHydrated] = useState(false)
   const lastSelectedRef = useRef<string | null>(null)
   const cuesRef = useRef(cues)
@@ -448,7 +457,7 @@ export function RundownEditor({
 
   const refreshCues = useCallback(async () => {
     const r = await getRundownCues(rundown.id)
-    setCues(r.cues)
+    setCues(r.cues.map(normalizeCue))
     setCells(cellsToMap(r.cells))
   }, [rundown.id])
 
@@ -470,6 +479,8 @@ export function RundownEditor({
       start_time_override: null,
       auto_start: false,
       duration_ms: 0,
+      duration_mode: 'manual',
+      scripts: [],
       background_color: null,
       locked: false,
       created_at: new Date().toISOString(),
@@ -485,7 +496,7 @@ export function RundownEditor({
         setCues((prev) => prev.filter((c) => c.id !== optimisticCue.id))
         setFocusCueId(null)
       } else if (result.cue) {
-        const realCue = result.cue
+        const realCue = normalizeCue(result.cue)
         setCues((prev) => prev.map((c) => (c.id === optimisticCue.id ? realCue : c)))
         setFocusCueId(realCue.id)
         history.push({
@@ -522,6 +533,8 @@ export function RundownEditor({
       start_time_override: null,
       auto_start: false,
       duration_ms: 0,
+      duration_mode: 'manual',
+      scripts: [],
       background_color: null,
       locked: false,
       created_at: new Date().toISOString(),
@@ -537,7 +550,7 @@ export function RundownEditor({
         setCues((prev) => prev.filter((c) => c.id !== optimisticCue.id))
         setFocusCueId(null)
       } else if (result.cue) {
-        const realCue = result.cue
+        const realCue = normalizeCue(result.cue)
         setCues((prev) => prev.map((c) => (c.id === optimisticCue.id ? realCue : c)))
         setFocusCueId(realCue.id)
         history.push({
@@ -591,7 +604,7 @@ export function RundownEditor({
     try {
       const r = await addCue(rundown.id, sorted.length, groupId)
       if (r.error || !r.cue) { toast.error(r.error ?? 'Failed to add cue'); return }
-      const newCue = r.cue
+      const newCue = normalizeCue(r.cue)
       setFocusCueId(newCue.id)
       const orderIds = sorted.map((c) => c.id)
       orderIds.splice(direction === 'above' ? idx : idx + 1, 0, newCue.id)
@@ -683,6 +696,78 @@ export function RundownEditor({
   const handlePrivateNoteChange = useCallback((cueId: string, content: string) => {
     setPrivateNotes((prev) => ({ ...prev, [cueId]: content }))
   }, [])
+
+  // --- Script/talent-text handlers ---
+  const handleAddScript = useCallback((cueId: string) => {
+    const cue = cuesRef.current.find((c) => c.id === cueId)
+    if (!cue) return
+    const block = newScriptBlock()
+    const scripts = [...cue.scripts, block]
+    setFocusScriptId(block.id)
+    setCues((prev) => prev.map((c) => (c.id === cueId ? { ...c, scripts } : c)))
+    updateCue(cueId, rundown.id, { scripts })
+  }, [rundown.id])
+
+  const handleScriptsChange = useCallback((cueId: string, scripts: ScriptBlock[]) => {
+    const cue = cuesRef.current.find((c) => c.id === cueId)
+    if (!cue) return
+    const updates: Partial<Cue> = { scripts }
+    if (cue.duration_mode === 'auto') {
+      const words = scriptsWordCount(scripts)
+      // Zero words shouldn't zero out the duration — keep the last computed value (#54 edge case).
+      if (words > 0) updates.duration_ms = autoDurationMs(words)
+    }
+    setCues((prev) => prev.map((c) => (c.id === cueId ? { ...c, ...updates } : c)))
+    updateCue(cueId, rundown.id, updates)
+  }, [rundown.id])
+
+  const handleDeleteScript = useCallback((cueId: string, scriptId: string) => {
+    const cue = cuesRef.current.find((c) => c.id === cueId)
+    if (!cue) return
+    const scripts = cue.scripts.filter((s) => s.id !== scriptId)
+    const updates: Partial<Cue> = { scripts }
+    if (scripts.length === 0 && cue.duration_mode === 'auto') {
+      // Revert to manual, preserving the last auto-computed duration as-is.
+      updates.duration_mode = 'manual'
+    }
+    setCues((prev) => prev.map((c) => (c.id === cueId ? { ...c, ...updates } : c)))
+    updateCue(cueId, rundown.id, updates)
+  }, [rundown.id])
+
+  const handleToggleScriptCollapsed = useCallback((cueId: string, scriptId: string) => {
+    const cue = cuesRef.current.find((c) => c.id === cueId)
+    if (!cue) return
+    const scripts = cue.scripts.map((s) => (s.id === scriptId ? { ...s, collapsed: !s.collapsed } : s))
+    setCues((prev) => prev.map((c) => (c.id === cueId ? { ...c, scripts } : c)))
+    updateCue(cueId, rundown.id, { scripts })
+  }, [rundown.id])
+
+  const handleSetDurationMode = useCallback((cueId: string, mode: 'manual' | 'auto') => {
+    const cue = cuesRef.current.find((c) => c.id === cueId)
+    if (!cue) return
+    const updates: Partial<Cue> = { duration_mode: mode }
+    if (mode === 'auto') {
+      const words = scriptsWordCount(cue.scripts)
+      if (words > 0) updates.duration_ms = autoDurationMs(words)
+    }
+    setCues((prev) => prev.map((c) => (c.id === cueId ? { ...c, ...updates } : c)))
+    updateCue(cueId, rundown.id, updates)
+  }, [rundown.id])
+
+  // Columns-dropdown bulk actions: expand/collapse every script block in the rundown at once.
+  const handleSetAllScriptsCollapsed = useCallback(async (collapsed: boolean) => {
+    const affected = cuesRef.current.filter((c) => c.scripts.length > 0)
+    if (affected.length === 0) return
+    const nextScriptsByCue = new Map(
+      affected.map((c) => [c.id, c.scripts.map((s) => ({ ...s, collapsed }))])
+    )
+    setCues((prev) =>
+      prev.map((c) => (nextScriptsByCue.has(c.id) ? { ...c, scripts: nextScriptsByCue.get(c.id)! } : c))
+    )
+    await Promise.all(
+      affected.map((c) => updateCue(c.id, rundown.id, { scripts: nextScriptsByCue.get(c.id)! }))
+    )
+  }, [rundown.id])
 
   // --- Batch handlers ---
   const handleSelectAll = useCallback(() => setSelectedIds(new Set(selectableIds)), [selectableIds])
@@ -897,6 +982,12 @@ export function RundownEditor({
         onDuplicate={handleDuplicateSingle}
         onRemoveFromGroup={handleRemoveFromGroup}
         onCellChange={handleCellChange}
+        onAddScript={handleAddScript}
+        onScriptsChange={handleScriptsChange}
+        onDeleteScript={handleDeleteScript}
+        onToggleScriptCollapsed={handleToggleScriptCollapsed}
+        onSetDurationMode={handleSetDurationMode}
+        focusScriptId={focusScriptId}
         live={live.isLive}
         isActive={cue.id === live.activeCueId}
         isNext={cue.id === live.nextCueId}
@@ -1030,6 +1121,8 @@ export function RundownEditor({
             onTitleWidthChange={setTitleWidth}
             privateNotesWidth={privateNotesWidth}
             onPrivateNotesWidthChange={setPrivateNotesWidth}
+            onExpandAllScripts={() => handleSetAllScriptsCollapsed(false)}
+            onCollapseAllScripts={() => handleSetAllScriptsCollapsed(true)}
           />
           </div>
 

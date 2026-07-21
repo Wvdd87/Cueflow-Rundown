@@ -100,7 +100,7 @@ export async function convertCueToHeading(id: string, rundownId: string) {
 export async function updateCue(
   id: string,
   rundownId: string,
-  updates: Partial<Pick<Cue, 'title' | 'subtitle' | 'cue_number' | 'duration_ms' | 'start_type' | 'start_time_override' | 'auto_start' | 'background_color' | 'locked' | 'group_id'>>
+  updates: Partial<Pick<Cue, 'title' | 'subtitle' | 'cue_number' | 'duration_ms' | 'duration_mode' | 'scripts' | 'start_type' | 'start_time_override' | 'auto_start' | 'background_color' | 'locked' | 'group_id'>>
 ) {
   const { supabase } = await getRundownAccess(rundownId)
 
@@ -262,6 +262,8 @@ export async function duplicateCues(rundownId: string, ids: string[]) {
         start_type: c.start_type,
         start_time_override: c.start_time_override,
         duration_ms: c.duration_ms,
+        duration_mode: c.duration_mode,
+        scripts: c.scripts,
         background_color: c.background_color,
         locked: c.locked,
       } as never)

@@ -15,6 +15,8 @@ import {
   Eye,
   Info,
   ChevronDown,
+  ChevronsDown,
+  ChevronsUp,
   SlidersHorizontal,
   RotateCcw,
 } from 'lucide-react'
@@ -94,6 +96,8 @@ interface ColumnHeadersProps {
   onTitleWidthChange: (w: number) => void
   privateNotesWidth: number
   onPrivateNotesWidthChange: (w: number) => void
+  onExpandAllScripts: () => void
+  onCollapseAllScripts: () => void
 }
 
 // Build a merged list of [col ids, TITLE_COL_ID, PRIVATE_NOTES_ID] for DnD.
@@ -134,6 +138,8 @@ export function ColumnHeaders({
   onTitleWidthChange,
   privateNotesWidth,
   onPrivateNotesWidthChange,
+  onExpandAllScripts,
+  onCollapseAllScripts,
 }: ColumnHeadersProps) {
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
@@ -411,6 +417,17 @@ export function ColumnHeaders({
               className={EDIT_ITEM}
             >
               <RotateCcw className="w-3.5 h-3.5 text-[#9ba0ab]" /> Reset column layout
+            </DropdownMenuItem>
+
+            <DropdownMenuSeparator className="bg-[#1d1d24]" />
+            <div className="px-3.5 pt-2 pb-1">
+              <p className="font-cond text-[9px] font-bold uppercase tracking-[0.16em] text-[#5a5c66]">Script text</p>
+            </div>
+            <DropdownMenuItem onClick={onExpandAllScripts} className={EDIT_ITEM}>
+              <ChevronsDown className="w-3.5 h-3.5 text-[#9ba0ab]" /> Expand all script blocks
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onCollapseAllScripts} className={EDIT_ITEM}>
+              <ChevronsUp className="w-3.5 h-3.5 text-[#9ba0ab]" /> Collapse all script blocks
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
