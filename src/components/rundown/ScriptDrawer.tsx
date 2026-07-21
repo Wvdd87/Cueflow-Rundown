@@ -63,6 +63,37 @@ export function ScriptDrawer({
   )
 }
 
+/** Shared header for both drawer states — identical markup keeps the chevron/delete
+ *  buttons pixel-aligned when toggling, instead of jumping between two different layouts. */
+function ScriptHeader({
+  words,
+  expanded,
+  onToggle,
+  onDelete,
+}: {
+  words: number
+  expanded: boolean
+  onToggle: () => void
+  onDelete: () => void
+}) {
+  return (
+    <div className="flex items-center justify-between px-3 pt-2 pb-1">
+      <span className={LABEL}>Script</span>
+      <div className="flex items-center gap-2.5">
+        <span className="font-mono text-[10px] text-[#454750]">
+          {words} word{words === 1 ? '' : 's'}
+        </span>
+        <button onClick={onToggle} title={expanded ? 'Collapse script' : 'Expand script'} className="text-[#7c7e8a] hover:text-[#eef0f3] transition-colors">
+          {expanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+        </button>
+        <button onClick={onDelete} title="Delete script" className="text-[#7c7e8a] hover:text-[#ff5a73] transition-colors">
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function CollapsedScript({
   block,
   onExpand,
@@ -74,9 +105,9 @@ function CollapsedScript({
 }) {
   const preview = scriptCollapsedPreview(block.content)
   return (
-    <div className="flex items-center gap-2.5 bg-[#111116] border border-[#1d1d24] px-3 py-2">
-      <span className={LABEL + ' shrink-0'}>Script</span>
-      <div className="flex-1 min-w-0 text-[12px]" style={{ color: 'rgba(238,240,243,0.55)' }}>
+    <div className="bg-[#111116] border border-[#1d1d24]">
+      <ScriptHeader words={wordCount(block.content)} expanded={false} onToggle={onExpand} onDelete={onDelete} />
+      <div className="px-3 pb-2.5 text-[12px]" style={{ color: 'rgba(238,240,243,0.55)' }}>
         {preview.first ? (
           <>
             <p className="truncate">{preview.first}</p>
@@ -86,12 +117,6 @@ function CollapsedScript({
           <p className="italic opacity-70">Empty script</p>
         )}
       </div>
-      <button onClick={onExpand} title="Expand script" className="shrink-0 text-[#7c7e8a] hover:text-[#eef0f3] transition-colors">
-        <ChevronRight className="w-3.5 h-3.5" />
-      </button>
-      <button onClick={onDelete} title="Delete script" className="shrink-0 text-[#7c7e8a] hover:text-[#ff5a73] transition-colors">
-        <Trash2 className="w-3.5 h-3.5" />
-      </button>
     </div>
   )
 }
@@ -123,20 +148,7 @@ function ExpandedScript({
 
   return (
     <div className="bg-[#111116] border border-[#1d1d24]">
-      <div className="flex items-center justify-between px-3 pt-2 pb-1">
-        <span className={LABEL}>Script</span>
-        <div className="flex items-center gap-2.5">
-          <span className="font-mono text-[10px] text-[#454750]">
-            {words} word{words === 1 ? '' : 's'}
-          </span>
-          <button onClick={onCollapse} title="Collapse script" className="text-[#7c7e8a] hover:text-[#eef0f3] transition-colors">
-            <ChevronDown className="w-3.5 h-3.5" />
-          </button>
-          <button onClick={onDelete} title="Delete script" className="text-[#7c7e8a] hover:text-[#ff5a73] transition-colors">
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      </div>
+      <ScriptHeader words={words} expanded onToggle={onCollapse} onDelete={onDelete} />
 
       {editing ? (
         <ScriptTipTap
