@@ -512,6 +512,27 @@ export function CueRow({
               {formatDuration(cue.duration_ms)}
             </span>
           )}
+
+          {/* Passive "Auto" status pill — the only persistent indication that this cue's
+              duration is script-driven; the option to change it lives in the click-to-edit flow above. */}
+          {isAutoDuration && !editingDuration && !(isActive && live) && (
+            <span
+              data-testid="duration-auto-pill"
+              title={
+                scriptWords > 0
+                  ? `Auto — from ${scriptWords} script word${scriptWords === 1 ? '' : 's'}`
+                  : 'Auto — scripts are currently empty, showing the last value'
+              }
+              className="absolute left-1/2 -translate-x-1/2 -bottom-[13px] z-20 flex items-center justify-center px-1.5 h-[18px] font-mono text-[8px] font-bold uppercase tracking-wide"
+              style={{
+                background: '#09090d',
+                border: `1px solid ${scriptWords > 0 ? 'rgba(240,168,56,0.5)' : 'rgba(255,90,115,0.5)'}`,
+                color: scriptWords > 0 ? '#f0a838' : '#ff5a73',
+              }}
+            >
+              Auto
+            </span>
+          )}
         </div>
 
         {/* Left-of-title dynamic cells */}
