@@ -969,6 +969,7 @@ export function RundownEditor({
         displayNumber={displayNumber}
         timeFormat={rundownSettings.time_display}
         depth={depth}
+        rowWidth={rowWidth}
         columns={visibleColumns}
         cells={cells}
         rundownId={rundown.id}

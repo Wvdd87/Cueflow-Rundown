@@ -9,7 +9,7 @@ import Highlight from '@tiptap/extension-highlight'
 import { HeadingSize } from './HeadingSize'
 import { BubbleTipTapToolbar } from './RichTextCell'
 import { formatDuration } from '@/lib/timing'
-import { wordCount, autoDurationMs, scriptPreview, type ScriptBlock } from '@/lib/scripts'
+import { wordCount, autoDurationMs, scriptCollapsedPreview, type ScriptBlock } from '@/lib/scripts'
 
 const LABEL = 'font-cond text-[9px] font-bold uppercase tracking-[0.16em] text-[#5a5c66]'
 
@@ -17,6 +17,9 @@ interface ScriptDrawerProps {
   scripts: ScriptBlock[]
   focusScriptId?: string | null
   indent: number
+  /** Total row content width (px) — pins the drawer to the row above it so long
+   *  unwrapped text can't inflate the horizontal-scroll container's intrinsic width. */
+  width: number
   onChange: (scripts: ScriptBlock[]) => void
   onDelete: (scriptId: string) => void
   onToggleCollapsed: (scriptId: string) => void
@@ -27,6 +30,7 @@ export function ScriptDrawer({
   scripts,
   focusScriptId,
   indent,
+  width,
   onChange,
   onDelete,
   onToggleCollapsed,
@@ -35,7 +39,7 @@ export function ScriptDrawer({
   return (
     <div
       className="flex flex-col gap-1.5"
-      style={{ paddingLeft: indent, paddingRight: 14, marginTop: -2, marginBottom: 6 }}
+      style={{ width, boxSizing: 'border-box', paddingLeft: indent, paddingRight: 14, marginTop: -2, marginBottom: 6 }}
     >
       {scripts.map((block) =>
         block.collapsed ? (
@@ -69,16 +73,23 @@ function CollapsedScript({
   onExpand: () => void
   onDelete: () => void
 }) {
-  const preview = scriptPreview(block.content)
+  const preview = scriptCollapsedPreview(block.content)
   return (
     <div className="flex items-center gap-2.5 bg-[#111116] border border-[#1d1d24] px-3 py-2">
       <button onClick={onExpand} title="Expand script" className="shrink-0 text-[#7c7e8a] hover:text-[#eef0f3] transition-colors">
         <ChevronDown className="w-3.5 h-3.5" />
       </button>
       <span className={LABEL + ' shrink-0'}>Script</span>
-      <p className="flex-1 min-w-0 truncate text-[12px]" style={{ color: 'rgba(238,240,243,0.55)' }}>
-        {preview || <span className="italic opacity-70">Empty script</span>}
-      </p>
+      <div className="flex-1 min-w-0 text-[12px]" style={{ color: 'rgba(238,240,243,0.55)' }}>
+        {preview.first ? (
+          <>
+            <p className="truncate">{preview.first}</p>
+            {preview.last && <p className="truncate">{preview.last}</p>}
+          </>
+        ) : (
+          <p className="italic opacity-70">Empty script</p>
+        )}
+      </div>
       <button onClick={onDelete} title="Delete script" className="shrink-0 text-[#7c7e8a] hover:text-[#ff5a73] transition-colors">
         <Trash2 className="w-3.5 h-3.5" />
       </button>
@@ -137,7 +148,7 @@ function ExpandedScript({
       ) : (
         <button
           onClick={() => setEditing(true)}
-          className="block w-full text-left px-3 pb-2.5 text-[12px] leading-[1.6] [overflow-wrap:anywhere]"
+          className="block w-full text-left px-3 pb-2.5 text-[12px] leading-[1.6] break-words [overflow-wrap:anywhere]"
           style={{ color: isEmpty ? '#5a5c66' : 'rgba(238,240,243,0.6)' }}
         >
           {isEmpty ? (
@@ -149,6 +160,19 @@ function ExpandedScript({
       )}
     </div>
   )
+}
+
+/** Strip inline colour/background/font formatting from pasted HTML so scripts
+ *  always stay in the app's own readable colour, regardless of paste source. */
+function stripPastedColor(html: string): string {
+  return html
+    .replace(/<mark[^>]*>/gi, '')
+    .replace(/<\/mark>/gi, '')
+    .replace(/<font[^>]*>/gi, '')
+    .replace(/<\/font>/gi, '')
+    .replace(/\sstyle="[^"]*"/gi, '')
+    .replace(/\sstyle='[^']*'/gi, '')
+    .replace(/\scolor="[^"]*"/gi, '')
 }
 
 /** Mounted only while a script block is being edited. */
@@ -183,8 +207,11 @@ function ScriptTipTap({
     autofocus: 'end',
     editorProps: {
       attributes: {
-        class: 'tiptap-cell focus:outline-none w-full text-[12px] leading-[1.6] text-[#eef0f3]',
+        class: 'tiptap-cell focus:outline-none w-full text-[12px] leading-[1.6] text-[#eef0f3] break-words [overflow-wrap:anywhere]',
       },
+      // Scripts must always render in the app's own readable colour — strip any
+      // text/background colour a paste source (Word, Docs, web pages) brings along.
+      transformPastedHTML: stripPastedColor,
     },
     onUpdate: ({ editor }) => onLiveChange(editor.getHTML()),
   })

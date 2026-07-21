@@ -33,11 +33,19 @@ export function newScriptBlock(): ScriptBlock {
   }
 }
 
-/** First ~15 words of a script block, for the single-line collapsed preview. */
-export function scriptPreview(html: string, wordLimit = 15): string {
+/**
+ * Two-line collapsed preview: first ~15 words on one line, last ~15 words on
+ * the next (each prefixed/suffixed with an ellipsis) — lets you scan both the
+ * top and the tail of a script without expanding it. `last` is null when the
+ * script is short enough that the first line already covers it in full.
+ */
+export function scriptCollapsedPreview(html: string, chunk = 15): { first: string; last: string | null } {
   const text = stripHtml(html)
-  if (!text) return ''
+  if (!text) return { first: '', last: null }
   const words = text.split(/\s+/).filter(Boolean)
-  if (words.length <= wordLimit) return words.join(' ')
-  return words.slice(0, wordLimit).join(' ') + '…'
+  if (words.length <= chunk) return { first: words.join(' '), last: null }
+  return {
+    first: words.slice(0, chunk).join(' ') + '…',
+    last: '…' + words.slice(-chunk).join(' '),
+  }
 }

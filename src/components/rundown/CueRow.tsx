@@ -51,6 +51,7 @@ interface CueRowProps {
   cue: CueTimingOutput
   displayNumber: string
   depth: number
+  rowWidth: number
   columns: Column[]
   cells: Record<string, string>
   rundownId: string
@@ -98,6 +99,7 @@ export function CueRow({
   cue,
   displayNumber,
   depth,
+  rowWidth,
   columns,
   cells,
   rundownId,
@@ -666,6 +668,7 @@ export function CueRow({
         scripts={cue.scripts}
         focusScriptId={focusScriptId}
         indent={labelIndent}
+        width={rowWidth}
         onChange={(scripts) => onScriptsChange(cue.id, scripts)}
         onDelete={(scriptId) => onDeleteScript(cue.id, scriptId)}
         onToggleCollapsed={(scriptId) => onToggleScriptCollapsed(cue.id, scriptId)}
