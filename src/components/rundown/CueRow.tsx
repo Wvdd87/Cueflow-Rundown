@@ -464,14 +464,37 @@ export function CueRow({
           onClick={() => !editingDuration && !(isActive && live) && startDurationEdit()}
         >
           {editingDuration ? (
-            <input
-              ref={durationRef}
-              value={durationInput}
-              onChange={(e) => setDurationInput(e.target.value)}
-              onBlur={saveDuration}
-              onKeyDown={(e) => { if (e.key === 'Enter') saveDuration(); if (e.key === 'Escape') setEditingDuration(false) }}
-              className="w-full bg-[#0a0a0d] border border-[#f0a838] px-1 py-0.5 text-[13px] text-[#eef0f3] font-mono outline-none"
-            />
+            <>
+              <input
+                ref={durationRef}
+                value={durationInput}
+                onChange={(e) => setDurationInput(e.target.value)}
+                onBlur={saveDuration}
+                onKeyDown={(e) => { if (e.key === 'Enter') saveDuration(); if (e.key === 'Escape') setEditingDuration(false) }}
+                className="w-full bg-[#0a0a0d] border border-[#f0a838] px-1 py-0.5 text-[13px] text-[#eef0f3] font-mono outline-none"
+              />
+              {/* The auto-duration option only surfaces here, as part of editing — not as a persistent badge */}
+              {cue.scripts.length > 0 && (
+                <button
+                  data-testid="use-auto-duration-btn"
+                  title={
+                    scriptWords > 0
+                      ? `Use auto duration — from ${scriptWords} script word${scriptWords === 1 ? '' : 's'}`
+                      : 'Use auto duration (scripts are currently empty)'
+                  }
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setEditingDuration(false)
+                    onSetDurationMode(cue.id, 'auto')
+                  }}
+                  className="mt-1 font-mono text-[8px] font-bold uppercase tracking-wide px-1.5 py-[1px] text-[#f0a838] hover:bg-[rgba(240,168,56,0.12)] transition-colors"
+                  style={{ border: '1px solid rgba(240,168,56,0.5)' }}
+                >
+                  Use auto
+                </button>
+              )}
+            </>
           ) : isActive && liveRemainingMs != null ? (
             <>
               <span className="font-mono text-[10px] tabular-nums leading-none" style={{ color: ct.mid }}>
@@ -482,47 +505,12 @@ export function CueRow({
               </span>
             </>
           ) : (
-            <>
-              <span
-                className="font-mono text-[15px] font-semibold tabular-nums"
-                style={{ color: isAutoDuration ? '#f0a838' : ct.hi, opacity: isAutoDuration ? 0.9 : 1 }}
-              >
-                {formatDuration(cue.duration_ms)}
-              </span>
-              {isAutoDuration && (
-                <span
-                  data-testid="duration-auto-badge"
-                  title={
-                    scriptWords > 0
-                      ? `Auto — from ${scriptWords} script word${scriptWords === 1 ? '' : 's'}`
-                      : 'Auto — scripts are empty, showing last value'
-                  }
-                  className="font-mono text-[8px] font-bold uppercase tracking-wide px-1 py-[1px]"
-                  style={{
-                    color: scriptWords > 0 ? '#f0a838' : '#ff5a73',
-                    border: `1px solid ${scriptWords > 0 ? 'rgba(240,168,56,0.5)' : 'rgba(255,90,115,0.5)'}`,
-                  }}
-                >
-                  Auto
-                </span>
-              )}
-            </>
-          )}
-
-          {/* Manual / Auto duration toggle — only meaningful once the cue has scripts */}
-          {cue.scripts.length > 0 && !(isActive && live) && (
-            <button
-              onClick={(e) => { e.stopPropagation(); onSetDurationMode(cue.id, isAutoDuration ? 'manual' : 'auto') }}
-              title={isAutoDuration ? 'Switch to manual duration' : 'Switch to auto duration (from script length)'}
-              className="absolute left-1/2 -translate-x-1/2 -bottom-[13px] z-20 flex items-center justify-center px-1.5 h-[18px] font-mono text-[8px] font-bold uppercase tracking-wide transition-colors"
-              style={{
-                background: '#09090d',
-                border: `1px solid ${isAutoDuration ? 'rgba(240,168,56,0.5)' : '#3a3a48'}`,
-                color: isAutoDuration ? '#f0a838' : '#7c7e8a',
-              }}
+            <span
+              className="font-mono text-[15px] font-semibold tabular-nums"
+              style={{ color: isAutoDuration ? '#f0a838' : ct.hi, opacity: isAutoDuration ? 0.9 : 1 }}
             >
-              {isAutoDuration ? 'Auto' : 'Manual'}
-            </button>
+              {formatDuration(cue.duration_ms)}
+            </span>
           )}
         </div>
 
