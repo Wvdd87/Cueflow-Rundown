@@ -8,8 +8,7 @@ import { TextStyle, Color } from '@tiptap/extension-text-style'
 import Highlight from '@tiptap/extension-highlight'
 import { HeadingSize } from './HeadingSize'
 import { BubbleTipTapToolbar } from './RichTextCell'
-import { formatDuration } from '@/lib/timing'
-import { wordCount, autoDurationMs, scriptCollapsedPreview, type ScriptBlock } from '@/lib/scripts'
+import { wordCount, scriptCollapsedPreview, type ScriptBlock } from '@/lib/scripts'
 
 const LABEL = 'font-cond text-[9px] font-bold uppercase tracking-[0.16em] text-[#5a5c66]'
 
@@ -128,7 +127,7 @@ function ExpandedScript({
         <span className={LABEL}>Script</span>
         <div className="flex items-center gap-2.5">
           <span className="font-mono text-[10px] text-[#454750]">
-            {words} word{words === 1 ? '' : 's'} · {formatDuration(autoDurationMs(words))}
+            {words} word{words === 1 ? '' : 's'}
           </span>
           <button onClick={onCollapse} title="Collapse script" className="text-[#7c7e8a] hover:text-[#eef0f3] transition-colors">
             <ChevronUp className="w-3.5 h-3.5" />

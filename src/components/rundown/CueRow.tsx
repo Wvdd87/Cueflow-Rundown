@@ -510,18 +510,15 @@ export function CueRow({
           )}
 
           {/* Manual / Auto duration toggle — only meaningful once the cue has scripts */}
-          {cue.scripts.length > 0 && !editingDuration && !(isActive && live) && (
+          {cue.scripts.length > 0 && !(isActive && live) && (
             <button
               onClick={(e) => { e.stopPropagation(); onSetDurationMode(cue.id, isAutoDuration ? 'manual' : 'auto') }}
               title={isAutoDuration ? 'Switch to manual duration' : 'Switch to auto duration (from script length)'}
-              className={cn(
-                'absolute left-1/2 -translate-x-1/2 -bottom-[13px] z-20 flex items-center justify-center px-1.5 h-[18px] font-mono text-[8px] font-bold uppercase tracking-wide transition-colors',
-                !isAutoDuration && 'opacity-0 group-hover:opacity-100'
-              )}
+              className="absolute left-1/2 -translate-x-1/2 -bottom-[13px] z-20 flex items-center justify-center px-1.5 h-[18px] font-mono text-[8px] font-bold uppercase tracking-wide transition-colors"
               style={{
                 background: '#09090d',
-                border: `1px solid ${isAutoDuration ? 'rgba(240,168,56,0.5)' : '#1d1d24'}`,
-                color: isAutoDuration ? '#f0a838' : '#3a3a48',
+                border: `1px solid ${isAutoDuration ? 'rgba(240,168,56,0.5)' : '#3a3a48'}`,
+                color: isAutoDuration ? '#f0a838' : '#7c7e8a',
               }}
             >
               {isAutoDuration ? 'Auto' : 'Manual'}
