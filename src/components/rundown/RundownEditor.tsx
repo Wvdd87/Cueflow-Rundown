@@ -170,10 +170,6 @@ export function RundownEditor({
   // (row color/badges) apply for everyone including collaborators.
   const [rules, setRules] = useState<RundownRule[]>(rundown.rules ?? [])
   const [rulesOpen, setRulesOpen] = useState(false)
-  const handleRulesChange = useCallback((next: RundownRule[]) => {
-    setRules(next)
-    updateRundownRules(rundown.id, next)
-  }, [rundown.id])
 
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsTab, setSettingsTab] = useState<'display' | 'numbering'>('display')
@@ -185,6 +181,12 @@ export function RundownEditor({
   const [duplicatingIds, setDuplicatingIds] = useState<Set<string>>(new Set())
   const [batchDuplicating, setBatchDuplicating] = useState(false)
   const { saveStatus, trackSave } = useSaveStatus()
+  const handleRulesChange = useCallback((next: RundownRule[]) => {
+    setRules(next)
+    trackSave(updateRundownRules(rundown.id, next)).then((r) => {
+      if (r?.error) toast.error(r.error)
+    })
+  }, [rundown.id, trackSave])
   const [finalizeWarningOpen, setFinalizeWarningOpen] = useState(false)
   const [filters, setFilters] = useState<CueFilterState>(() => emptyFilters())
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
