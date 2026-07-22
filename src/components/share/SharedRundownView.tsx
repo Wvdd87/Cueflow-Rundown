@@ -42,8 +42,6 @@ import {
   ChevronDown,
   ChevronRight,
   Pin,
-  LocateFixed,
-  Locate,
   ArrowUpToLine,
 } from 'lucide-react'
 import { upsertSharePrivateNote } from '@/app/actions/sharePrivateNotes'
@@ -383,24 +381,9 @@ export function SharedRundownView({
         <h1 className="font-semibold text-[15px] text-[#eef0f3] truncate">{rundown.name}</h1>
         <StatusBadge status={rundown.status} />
         {live.status === 'running' && (
-          <span className="flex items-center gap-1.5 font-cond text-[11px] font-bold uppercase tracking-[0.14em] text-[#ff4663]">
-            <span className="live-dot w-[7px] h-[7px] rounded-full bg-[#ff2848]" /> Live
+          <span className="flex items-center gap-1 font-cond text-[10px] font-medium uppercase tracking-[0.1em] text-[#9ba0ab]" title="Show is live">
+            <span className="w-[5px] h-[5px] rounded-full bg-[#ff2848]" /> Live
           </span>
-        )}
-        {isLive && (
-          <button
-            onClick={() => (following ? setFollowing(false) : resumeFollowing())}
-            title={following ? 'Following the live show — click to break away and browse freely' : 'Re-follow the live show'}
-            className={cn(
-              'flex items-center gap-1.5 h-7 px-2.5 font-cond text-[10px] font-bold uppercase tracking-[0.12em] transition-colors',
-              following
-                ? 'border border-[#ff2848]/50 text-[#ff5a73] bg-[rgba(255,40,72,0.10)] hover:bg-[rgba(255,40,72,0.18)]'
-                : 'border border-[#2e2e38] text-[#9ba0ab] hover:text-[#eef0f3] hover:border-[#3a3a48]'
-            )}
-          >
-            {following ? <LocateFixed className="w-3 h-3" /> : <Locate className="w-3 h-3" />}
-            {following ? 'Following' : 'Follow live'}
-          </button>
         )}
         <div className="ml-auto flex items-center gap-3">
           <RundownSearch cues={searchCues} onSelect={scrollToCue} />
