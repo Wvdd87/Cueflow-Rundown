@@ -19,7 +19,10 @@ import {
   arrayMove,
 } from '@dnd-kit/sortable'
 import { restrictToVerticalAxis } from '@dnd-kit/modifiers'
-import { updateRundownStatus, takeShowControl } from '@/app/actions/rundowns'
+import { updateRundownStatus, takeShowControl, updateRundownRules } from '@/app/actions/rundowns'
+import { RulesPanel } from './RulesPanel'
+import { evaluateRules } from '@/lib/rules'
+import { useDebouncedValue } from './useDebouncedValue'
 import { normalizeStatus, type RundownStatus } from '@/lib/rundownStatus'
 import { createAdminActions, createCollabActions } from './rundownActions'
 import { collabTakeControl } from '@/app/actions/collab'
@@ -66,6 +69,7 @@ import type {
   Variable,
   ScriptBlock,
   CellAttachment,
+  RundownRule,
 } from '@/lib/supabase/types'
 
 interface RundownEditorProps {
@@ -161,6 +165,15 @@ export function RundownEditor({
   const handleSaveSettings = useCallback((s: Partial<RundownSettings>) => {
     setRundownSettings((prev) => ({ ...prev, ...s }))
   }, [])
+
+  // Conditional rules (#65) — owner-edited only, but their visual results
+  // (row color/badges) apply for everyone including collaborators.
+  const [rules, setRules] = useState<RundownRule[]>(rundown.rules ?? [])
+  const [rulesOpen, setRulesOpen] = useState(false)
+  const handleRulesChange = useCallback((next: RundownRule[]) => {
+    setRules(next)
+    updateRundownRules(rundown.id, next)
+  }, [rundown.id])
 
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsTab, setSettingsTab] = useState<'display' | 'numbering'>('display')
@@ -396,6 +409,19 @@ export function RundownEditor({
   const timedMap = useMemo(
     () => Object.fromEntries(timedCues.map((t) => [t.id, t])) as Record<string, CueTimingOutput>,
     [timedCues]
+  )
+
+  // Rule evaluation is debounced 300ms behind edits so typing in a text cell
+  // doesn't re-run every active rule on every keystroke.
+  const debouncedTimedCues = useDebouncedValue(timedCues, 300)
+  const debouncedCells = useDebouncedValue(cells, 300)
+  const ruleResults = useMemo(
+    () => evaluateRules(rules, debouncedTimedCues, columns, debouncedCells),
+    [rules, debouncedTimedCues, columns, debouncedCells]
+  )
+  const groups = useMemo(
+    () => cues.filter((c) => c.cue_type === 'heading').map((h) => ({ id: h.id, title: h.title })),
+    [cues]
   )
   // Live navigation skips heading rows
   const liveCues = useMemo(
@@ -1256,6 +1282,7 @@ export function RundownEditor({
         groupNumber={groupDisplayNumber}
         privateNotesWidth={privateNotesWidth}
         focusTitle={cue.id === focusCueId}
+        ruleResult={ruleResults.get(cue.id)}
       />
     )
   }
@@ -1302,6 +1329,7 @@ export function RundownEditor({
             toast.success('Rundown timing reset')
           }}
           onOpenTrash={() => setTrashOpen(true)}
+          onOpenRules={() => setRulesOpen(true)}
           onOpenShortcuts={() => setShortcutsOpen(true)}
           searchCues={searchCues}
           onSearchSelect={handleSearchSelect}
@@ -1451,6 +1479,7 @@ export function RundownEditor({
                             onAddBelow={(id) => handleAddCueAtHeading(id, 'below')}
                             focused={gridNav.focusedCell?.cueId === item.heading.id}
                             onCellFocus={gridNav.focusCell}
+                            ruleResult={ruleResults.get(item.heading.id)}
                           />
                         )}
                         {(!headingVisible || !collapsed) &&
@@ -1581,6 +1610,17 @@ export function RundownEditor({
           onOpenChange={setSettingsOpen}
           initialTab={settingsTab}
         />
+
+        {!collab && (
+          <RulesPanel
+            open={rulesOpen}
+            onClose={() => setRulesOpen(false)}
+            rules={rules}
+            onChange={handleRulesChange}
+            columns={columns}
+            groups={groups}
+          />
+        )}
 
         <MentionsVariablesDialog
           open={mentionsOpen}

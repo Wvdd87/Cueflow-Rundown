@@ -26,6 +26,7 @@ import { inlineHtml } from '@/lib/utils'
 import { CF, CUE_COLORS, textOn } from './layout'
 import type { Cue } from '@/lib/supabase/types'
 import type { TimeDisplay } from '@/lib/timing'
+import type { RuleRowResult } from '@/lib/rules'
 
 function formatLong(ms: number): string {
   const total = Math.floor(Math.max(0, ms) / 1000)
@@ -54,6 +55,7 @@ interface GroupHeaderRowProps {
   onAddBelow?: (id: string) => void
   focused?: boolean
   onCellFocus?: (id: string, colId: string) => void
+  ruleResult?: RuleRowResult
 }
 
 const MI = 'gap-2.5 px-3.5 py-2.5 font-cond text-[11px] font-bold uppercase tracking-[0.1em] text-[#c8c9d0] focus:bg-[#16161c] focus:text-[#eef0f3] cursor-pointer'
@@ -77,6 +79,7 @@ export function GroupHeaderRow({
   onAddBelow,
   focused = false,
   onCellFocus,
+  ruleResult,
 }: GroupHeaderRowProps) {
   const isGroup = aggregate.count > 0
   const [editing, setEditing] = useState(false)
@@ -114,15 +117,17 @@ export function GroupHeaderRow({
     await updateCue(heading.id, rundownId, { background_color: color })
   }
 
-  const ct = textOn(heading.background_color)
-  const bandBg = heading.background_color
-    ? heading.background_color
+  const effectiveBg = ruleResult?.backgroundColor ?? heading.background_color
+  const autoCt = textOn(effectiveBg)
+  const ct = ruleResult?.textColor ? { hi: ruleResult.textColor, mid: ruleResult.textColor, num: ruleResult.textColor } : autoCt
+  const bandBg = effectiveBg
+    ? effectiveBg
     : isGroup
       ? (selected ? 'rgba(240,168,56,0.18)' : '#1a1a20')
       : (selected ? 'rgba(240,168,56,0.14)' : '#15151b')
   const bandBorder = selected
     ? 'rgba(240,168,56,0.4)'
-    : heading.background_color ? 'transparent' : '#26262e'
+    : effectiveBg ? 'transparent' : '#26262e'
 
   return (
     <div
@@ -234,11 +239,24 @@ export function GroupHeaderRow({
               {number}
             </span>
           ) : (
-            <span className="font-mono text-sm font-bold" style={{ color: heading.background_color ? ct.mid : '#7c7e8a' }}>
+            <span className="font-mono text-sm font-bold" style={{ color: effectiveBg ? ct.mid : '#7c7e8a' }}>
               {number}
             </span>
           )}
         </div>
+
+        {ruleResult && ruleResult.badges.length > 0 && (
+          <span
+            data-testid="rule-badges"
+            className="shrink-0 leading-none mr-1.5"
+            style={{ fontSize: 11 }}
+            title={ruleResult.badges.map((b) => b.label).join(', ')}
+          >
+            {ruleResult.badges.slice(0, 3).map((b, i) => (
+              <span key={i}>{b.icon}</span>
+            ))}
+          </span>
+        )}
 
         {/* Title + (group) aggregate */}
         <div
@@ -255,7 +273,7 @@ export function GroupHeaderRow({
               onBlur={saveTitle}
               onKeyDown={(e) => { if (e.key === 'Enter') saveTitle(); if (e.key === 'Escape') { setEditing(false); setTitle(heading.title || (isGroup ? 'New group' : '')) } }}
               className="w-full bg-transparent outline-none border-b border-[#f0a838]"
-              style={{ fontSize: isGroup ? 14 : 16, fontWeight: isGroup ? 600 : 700, color: heading.background_color ? ct.hi : '#fff' }}
+              style={{ fontSize: isGroup ? 14 : 16, fontWeight: isGroup ? 600 : 700, color: effectiveBg ? ct.hi : '#fff' }}
             />
           ) : (
             <button
@@ -266,7 +284,7 @@ export function GroupHeaderRow({
                 fontSize: isGroup ? 14 : 16,
                 fontWeight: isGroup ? 600 : 700,
                 letterSpacing: isGroup ? undefined : '0.01em',
-                color: heading.title ? (heading.background_color ? ct.hi : '#eef0f3') : '#5a5c66',
+                color: heading.title ? (effectiveBg ? ct.hi : '#eef0f3') : '#5a5c66',
                 fontStyle: heading.title ? 'normal' : 'italic',
               }}
             >

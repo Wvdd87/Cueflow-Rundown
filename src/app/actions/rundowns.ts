@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { Rundown, Column, Cue } from '@/lib/supabase/types'
+import type { Rundown, Column, Cue, RundownRule } from '@/lib/supabase/types'
 
 async function getTeamId() {
   const supabase = await createClient()
@@ -245,6 +245,21 @@ export async function updateRundownSettings(
   const { error } = await supabase
     .from('rundowns')
     .update(settings as never)
+    .eq('id', id)
+    .eq('team_id', teamId)
+
+  if (error) return { error: error.message }
+
+  revalidatePath(`/rundown/${id}`)
+  return { success: true }
+}
+
+export async function updateRundownRules(id: string, rules: RundownRule[]) {
+  const { supabase, teamId } = await getTeamId()
+
+  const { error } = await supabase
+    .from('rundowns')
+    .update({ rules } as never)
     .eq('id', id)
     .eq('team_id', teamId)
 

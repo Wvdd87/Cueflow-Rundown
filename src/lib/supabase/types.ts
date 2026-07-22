@@ -20,6 +20,57 @@ export interface CellAttachment {
   type: string
 }
 
+// ── Conditional rules (stored in rundowns.rules) ──
+
+export type RuleBuiltInField = 'not_final' | 'cue_type' | 'has_no_script' | 'group' | 'duration' | 'start_time'
+
+/** What a condition inspects: a user-defined column, or a built-in cue property. */
+export type RuleConditionTarget =
+  | { kind: 'column'; columnId: string }
+  | { kind: 'built-in'; field: RuleBuiltInField }
+
+export type RuleOperator =
+  | 'contains' | 'not_contains' | 'starts_with' | 'ends_with' | 'is_empty' | 'is_not_empty' | 'is_exactly'
+  | 'is' | 'is_not' | 'contains_any' | 'contains_none'
+  | 'longer_than' | 'shorter_than' | 'between'
+  | 'before' | 'after'
+  | 'is_true' | 'is_false'
+  | 'cue_type_is'
+  | 'in_group' | 'in_any_group'
+
+export interface RuleCondition {
+  id: string
+  target: RuleConditionTarget
+  operator: RuleOperator
+  /** Primary value: text match, dropdown option, group name, cue type, HH:MM:SS, or ms-as-string. */
+  value?: string
+  /** Second value, only for "between" operators. */
+  valueMax?: string
+}
+
+export interface RuleAction {
+  id: string
+  type: 'set_background_color' | 'set_text_color' | 'add_badge'
+  /** For set_background_color / set_text_color. */
+  color?: string
+  /** For set_background_color only — lets the rule win over a manually-set row color. */
+  overrideManualColor?: boolean
+  /** For add_badge — a single emoji glyph. */
+  badgeIcon?: string
+  /** For add_badge — shown as the badge's tooltip. */
+  badgeLabel?: string
+}
+
+export interface RundownRule {
+  id: string
+  label: string
+  active: boolean
+  conditionLogic: 'AND' | 'OR'
+  conditions: RuleCondition[]
+  actions: RuleAction[]
+  createdAt: string
+}
+
 export type Database = {
   public: {
     Tables: {
@@ -128,6 +179,7 @@ export type Database = {
           cue_number_prefix: string
           cue_number_start: number
           cue_number_digits: number
+          rules: RundownRule[]
         }
         Insert: {
           id?: string
@@ -146,6 +198,7 @@ export type Database = {
           cue_number_prefix?: string
           cue_number_start?: number
           cue_number_digits?: number
+          rules?: RundownRule[]
         }
         Update: {
           id?: string
@@ -161,6 +214,7 @@ export type Database = {
           cue_number_prefix?: string
           cue_number_start?: number
           cue_number_digits?: number
+          rules?: RundownRule[]
         }
       }
       columns: {

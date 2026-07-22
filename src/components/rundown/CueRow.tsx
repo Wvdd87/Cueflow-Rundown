@@ -43,6 +43,7 @@ import {
   PRIVATE_NOTES_ID,
 } from './layout'
 import { formatDuration, parseDurationInput, formatMsToTime, formatMsToTimeDisplay, parseClockInput } from '@/lib/timing'
+import type { RuleRowResult } from '@/lib/rules'
 import { scriptsWordCount, autoDurationMs } from '@/lib/scripts'
 import { cn, inlineHtml } from '@/lib/utils'
 import type { Cue, Column, ScriptBlock, CellAttachment } from '@/lib/supabase/types'
@@ -101,6 +102,9 @@ interface CueRowProps {
   /** Which column of this row currently has keyboard grid focus (null = none). */
   focusedColId?: string | null
   onCellFocus?: (cueId: string, colId: string) => void
+  /** Debounced conditional-rules result for this row (#65) — background/text
+   *  color already resolved against the manual color, badges to render. */
+  ruleResult?: RuleRowResult
 }
 
 const LABEL_FONT =
@@ -156,6 +160,7 @@ export function CueRow({
   focusTitle = false,
   focusedColId = null,
   onCellFocus,
+  ruleResult,
 }: CueRowProps) {
   const { trackSave, actions } = useRundownData()
   const [editingDuration, setEditingDuration] = useState(false)
@@ -262,10 +267,14 @@ export function CueRow({
   const isAutoDuration = cue.duration_mode === 'auto'
   const scriptWords = cue.scripts.length > 0 ? scriptsWordCount(cue.scripts) : 0
 
-  // ── Block-model colours ──
-  const ct = textOn(cue.background_color)
-  const baseCellBg = cue.background_color || '#16161c'
-  const numColor = isActive ? '#fff' : isNext ? '#eef0f3' : selected ? '#06060a' : (cue.background_color ? ct.num : '#9ba0ab')
+  // ── Block-model colours ── effectiveBg already resolves rule vs. manual
+  // precedence (see evaluateRules); an explicit rule text-color action wins
+  // over the auto-computed contrast color, background falls back to auto.
+  const effectiveBg = ruleResult?.backgroundColor ?? cue.background_color
+  const autoCt = textOn(effectiveBg)
+  const ct = ruleResult?.textColor ? { hi: ruleResult.textColor, mid: ruleResult.textColor, num: ruleResult.textColor } : autoCt
+  const baseCellBg = effectiveBg || '#16161c'
+  const numColor = isActive ? '#fff' : isNext ? '#eef0f3' : selected ? '#06060a' : (effectiveBg ? ct.num : '#9ba0ab')
   const remColor = liveRemainingMs == null ? '#eef0f3' : liveRemainingMs < 0 ? '#ff2848' : liveRemainingMs <= 30000 ? '#f0a838' : '#18d986'
 
   // shared tile base (block model)
@@ -461,7 +470,10 @@ export function CueRow({
           }}
           title={live ? 'Jump to this cue' : 'Click to select'}
           style={tile(CF.num, {
+            flexDirection: 'column',
+            alignItems: 'center',
             justifyContent: 'center',
+            gap: 2,
             cursor: 'pointer',
             background: isActive ? '#ff2848' : isNext ? 'transparent' : selected ? '#f0a838' : baseCellBg,
             border: isNext ? '1.5px solid #6b6b76' : 'none',
@@ -470,6 +482,18 @@ export function CueRow({
           <span className="font-mono text-sm font-bold tabular-nums" style={{ color: numColor }}>
             {displayNumber}
           </span>
+          {ruleResult && ruleResult.badges.length > 0 && (
+            <span
+              data-testid="rule-badges"
+              className="leading-none"
+              style={{ fontSize: 10 }}
+              title={ruleResult.badges.map((b) => b.label).join(', ')}
+            >
+              {ruleResult.badges.slice(0, 3).map((b, i) => (
+                <span key={i}>{b.icon}</span>
+              ))}
+            </span>
+          )}
         </div>
 
         {/* Start time */}
@@ -664,7 +688,7 @@ export function CueRow({
               data-cell-trigger
               onClick={() => setEditingTitle(true)}
               className="text-[16px] font-medium text-left w-full leading-[1.35] break-words [overflow-wrap:anywhere] transition-colors"
-              style={{ color: cue.title ? ct.hi : (cue.background_color ? ct.mid : '#6b6d78') }}
+              style={{ color: cue.title ? ct.hi : ((effectiveBg || ruleResult?.textColor) ? ct.mid : '#6b6d78') }}
             >
               {cue.title
                 ? <span className="tiptap-cell" dangerouslySetInnerHTML={{ __html: inlineHtml(cue.title) }} />
@@ -691,7 +715,7 @@ export function CueRow({
             <button
               onClick={() => setEditingSubtitle(true)}
               className="text-xs text-left w-full mt-0.5 italic opacity-0 group-hover/title:opacity-100 transition-opacity"
-              style={{ color: cue.background_color ? ct.mid : '#5a5c66' }}
+              style={{ color: (effectiveBg || ruleResult?.textColor) ? ct.mid : '#5a5c66' }}
             >
               Add a subtitle…
             </button>
@@ -702,7 +726,7 @@ export function CueRow({
               onClick={() => onAddScript(cue.id)}
               title="Add another script block"
               className="inline-flex items-center gap-1 text-[10px] text-left w-fit mt-1 opacity-0 group-hover/title:opacity-100 transition-opacity"
-              style={{ color: cue.background_color ? ct.mid : '#5a5c66' }}
+              style={{ color: (effectiveBg || ruleResult?.textColor) ? ct.mid : '#5a5c66' }}
             >
               <Plus className="w-2.5 h-2.5" /> Add script
             </button>

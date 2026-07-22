@@ -22,6 +22,7 @@ import {
   Redo2,
   Loader2,
   Keyboard,
+  Sparkles,
 } from 'lucide-react'
 import {
   renameRundown,
@@ -70,6 +71,7 @@ interface RundownHeaderProps {
   onOpenMentions: (tab?: 'mentions' | 'variables') => void
   onResetTiming: () => void
   onOpenTrash: () => void
+  onOpenRules: () => void
   onOpenShortcuts: () => void
   canUndo: boolean
   canRedo: boolean
@@ -114,6 +116,7 @@ export function RundownHeader({
   onOpenMentions,
   onResetTiming,
   onOpenTrash,
+  onOpenRules,
   onOpenShortcuts,
   canUndo,
   canRedo,
@@ -364,6 +367,9 @@ export function RundownHeader({
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => onOpenSettings()} className={MENU_ITEM}>
                 <SettingsIcon className="w-3.5 h-3.5 text-[#9ba0ab]" /> Settings
+              </DropdownMenuItem>
+              <DropdownMenuItem data-testid="open-rules-menu-item" onClick={onOpenRules} className={MENU_ITEM}>
+                <Sparkles className="w-3.5 h-3.5 text-[#9ba0ab]" /> Rules
               </DropdownMenuItem>
 
               <DropdownMenuSeparator className="bg-[#1d1d24]" />
