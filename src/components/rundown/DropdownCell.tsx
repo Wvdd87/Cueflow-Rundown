@@ -64,7 +64,15 @@ export function DropdownCell({
     await upsertCell(cueId, columnId, next, rundownId)
   }
 
-  function optionList(list: string[]) {
+  /** Swap one selected value for another, in place — the fix for "can't change a
+   *  selection once it's picked": clicking a badge reopens the picker and replaces it. */
+  async function replaceValue(oldV: string, newV: string) {
+    const next = serializeValues(values.map((x) => (x === oldV ? newV : x)))
+    onContentChange(cueId, columnId, next)
+    await upsertCell(cueId, columnId, next, rundownId)
+  }
+
+  function optionList(list: string[], onSelect: (v: string) => void) {
     return (
       <DropdownMenuContent
         align="start"
@@ -74,7 +82,7 @@ export function DropdownCell({
           <div className="px-3 py-2.5 text-[12px] text-[#5a5c66] italic">No options — edit the column</div>
         ) : (
           list.map((opt) => (
-            <DropdownMenuItem key={opt} onClick={() => addValue(opt)} className={OPTION_ITEM}>
+            <DropdownMenuItem key={opt} onClick={() => onSelect(opt)} className={OPTION_ITEM}>
               <span
                 className="w-2.5 h-2.5 rounded-full shrink-0 border border-[#3a3a48]"
                 style={{ backgroundColor: optionColors?.[opt] ?? 'transparent' }}
@@ -102,7 +110,7 @@ export function DropdownCell({
           <span className="text-[13px] text-[#5a5c66] italic">—</span>
           <ChevronDown className="w-3 h-3 text-[#5a5c66] shrink-0" />
         </DropdownMenuTrigger>
-        {optionList(options)}
+        {optionList(options, addValue)}
       </DropdownMenu>
     )
   }
@@ -115,13 +123,21 @@ export function DropdownCell({
           key={v}
           className="flex items-center gap-1 w-full group/badge"
         >
-          <span
-            data-testid="dropdown-badge"
-            className="flex-1 text-[12.5px] px-2.5 py-[5px] text-white font-semibold break-words [overflow-wrap:anywhere]"
-            style={{ backgroundColor: optionColors?.[v] ?? 'rgba(63,63,70,0.85)' }}
-          >
-            {v}
-          </span>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <button
+                  data-testid="dropdown-badge"
+                  title="Click to change selection"
+                  className="flex-1 min-w-0 text-left text-[12.5px] px-2.5 py-[5px] text-white font-semibold break-words [overflow-wrap:anywhere] hover:brightness-110 transition-[filter] cursor-pointer"
+                  style={{ backgroundColor: optionColors?.[v] ?? 'rgba(63,63,70,0.85)' }}
+                />
+              }
+            >
+              {v}
+            </DropdownMenuTrigger>
+            {optionList(remaining, (newV) => replaceValue(v, newV))}
+          </DropdownMenu>
           <button
             onClick={() => removeValue(v)}
             title={`Remove ${v}`}
@@ -145,7 +161,7 @@ export function DropdownCell({
           >
             <Plus className="w-2.5 h-2.5" /> Add
           </DropdownMenuTrigger>
-          {optionList(remaining)}
+          {optionList(remaining, addValue)}
         </DropdownMenu>
       )}
     </div>

@@ -955,13 +955,24 @@ export function RundownEditor({
     return { durationMs, startMs, endMs, count: children.length }
   }
 
-  function renderCueRow(cue: CueTimingOutput, rawNumber: string, depth: number, groupColor?: string | null) {
+  function renderCueRow(
+    cue: CueTimingOutput,
+    rawNumber: string,
+    depth: number,
+    groupColor?: string | null,
+    groupTitle?: string,
+    groupRawNumber?: string
+  ) {
     const displayNumber = formatCueNumber(
       rawNumber,
       rundownSettings.cue_number_prefix,
       rundownSettings.cue_number_start,
       rundownSettings.cue_number_digits
     )
+    const groupDisplayNumber =
+      groupRawNumber !== undefined
+        ? formatCueNumber(groupRawNumber, rundownSettings.cue_number_prefix, rundownSettings.cue_number_start, rundownSettings.cue_number_digits)
+        : undefined
     return (
       <CueRow
         key={cue.id}
@@ -1005,6 +1016,8 @@ export function RundownEditor({
         onToggleNextAutoStart={() => toggleNextAutoStart(cue.id)}
         titleWidth={titleWidth}
         groupColor={groupColor}
+        groupTitle={groupTitle}
+        groupNumber={groupDisplayNumber}
         privateNotesWidth={privateNotesWidth}
         focusTitle={cue.id === focusCueId}
       />
@@ -1176,7 +1189,7 @@ export function RundownEditor({
                           item.children.map((ch) => {
                             const timed = timedMap[ch.id]
                             return timed
-                              ? renderCueRow(timed, layout.numberOf[ch.id] ?? '', 1, item.heading.background_color)
+                              ? renderCueRow(timed, layout.numberOf[ch.id] ?? '', 1, item.heading.background_color, item.heading.title, item.number)
                               : null
                           })}
                       </Fragment>

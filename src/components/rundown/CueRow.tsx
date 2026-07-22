@@ -89,6 +89,8 @@ interface CueRowProps {
   timeFormat?: TimeDisplay
   titleWidth?: number
   groupColor?: string | null
+  groupTitle?: string
+  groupNumber?: string
   focusTitle?: boolean
 }
 
@@ -137,6 +139,8 @@ export function CueRow({
   timeFormat = 'auto',
   titleWidth = TITLE_COL_WIDTH,
   groupColor,
+  groupTitle,
+  groupNumber,
   focusTitle = false,
 }: CueRowProps) {
   const [editingDuration, setEditingDuration] = useState(false)
@@ -265,6 +269,22 @@ export function CueRow({
       data-cue-id={cue.id}
       onClick={(e) => e.stopPropagation()}
     >
+      {/* Parent group — shown above the current-cue indicator so a sub-cue's
+          group context (e.g. "3 — YOUNG VITO") stays visible once it's pinned to the top */}
+      {live && isActive && depth > 0 && groupNumber !== undefined && (
+        <div
+          data-testid="live-parent-group"
+          className={cn('flex items-center gap-1.5 pt-1', LABEL_FONT)}
+          style={{ paddingLeft: labelIndent, color: '#7c7e8a' }}
+        >
+          <span className="font-mono" style={{ color: groupColor ?? '#9ba0ab' }}>{groupNumber}</span>
+          <span
+            className="truncate normal-case tracking-normal font-sans text-[11px]"
+            dangerouslySetInnerHTML={{ __html: inlineHtml(groupTitle || '') || 'Untitled group' }}
+          />
+        </div>
+      )}
+
       {/* CURRENT / NEXT cue label (live mode) */}
       {live && (isActive || isNext) && (
         <div
