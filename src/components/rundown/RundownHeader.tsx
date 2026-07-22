@@ -54,6 +54,9 @@ interface RundownHeaderProps {
   columns: Column[]
   onPlayClick: () => void
   isLive: boolean
+  /** Set to another leader's label (e.g. a collaboration link) when they're
+   *  currently driving the show instead of the owner. */
+  showLeaderLabel?: string | null
   onOpenSettings: (tab?: 'display' | 'numbering') => void
   onOpenMentions: (tab?: 'mentions' | 'variables') => void
   onResetTiming: () => void
@@ -94,6 +97,7 @@ export function RundownHeader({
   columns,
   onPlayClick,
   isLive,
+  showLeaderLabel,
   onOpenSettings,
   onOpenMentions,
   onResetTiming,
@@ -272,6 +276,14 @@ export function RundownHeader({
       </div>
 
       {/* Run show / End show */}
+      {!isLive && showLeaderLabel && (
+        <span
+          title="Clicking Run show will reclaim control from them"
+          className="font-cond text-[10px] font-bold uppercase tracking-[0.1em] text-[#7c7e8a] shrink-0"
+        >
+          {showLeaderLabel} is running the show
+        </span>
+      )}
       {isLive ? (
         <button
           onClick={onPlayClick}

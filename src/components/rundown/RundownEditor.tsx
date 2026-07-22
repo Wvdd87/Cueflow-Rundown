@@ -36,7 +36,7 @@ import {
   removeFromGroup,
   getRundownCues,
 } from '@/app/actions/cues'
-import { updateRundownStatus } from '@/app/actions/rundowns'
+import { updateRundownStatus, takeShowControl } from '@/app/actions/rundowns'
 import { normalizeStatus, type RundownStatus } from '@/lib/rundownStatus'
 import { useUndoHistory } from './useUndoHistory'
 import { RundownHeader } from './RundownHeader'
@@ -60,7 +60,7 @@ import { KeyboardShortcutsDialog } from './KeyboardShortcutsDialog'
 import { buildCueLayout, formatCueNumber } from './cueTree'
 import { CF, totalRowWidth } from './layout'
 import { useLiveShow } from './useLiveShow'
-import { useBroadcastLive } from './liveSync'
+import { useBroadcastLive, useLeaderState } from './liveSync'
 import {
   calculateTimings,
   formatMsToTimeDisplay,
@@ -460,6 +460,12 @@ export function RundownEditor({
     return () => cont.removeEventListener('scroll', check)
   }, [live.isLive, live.activeCueId])
 
+  // Show control: null leaderToken means the owner is driving (the default).
+  // A collaboration link with canRunShow can take control instead — this
+  // gate stops our own idle/stale state from clobbering their broadcast.
+  const leader = useLeaderState(rundown.id)
+  const isShowLeader = leader.leaderToken === null
+
   // Broadcast the live show state (incl. timing) to read-only viewers
   useBroadcastLive(rundown.id, {
     activeCueId: live.activeCueId,
@@ -468,7 +474,7 @@ export function RundownEditor({
     elapsedMs: live.elapsedMs,
     durationMs: live.activeDurationMs,
     isLive: live.isLive,
-  })
+  }, isShowLeader)
 
   const firstCueId = liveCues[0]?.id ?? null
   // Auto-start toggle between cues: shown only when the next cue is soft-start.
@@ -1205,14 +1211,19 @@ export function RundownEditor({
         <RundownHeader
           rundown={rundown}
           columns={columns}
-          onPlayClick={() => {
+          onPlayClick={async () => {
             if (live.isLive) { live.end(); return }
+            // Reclaim show control in case a collaborator was driving —
+            // starting the show is always a deliberate owner override.
+            await takeShowControl(rundown.id)
+            leader.refresh()
             // Start from the earliest selected cue (in document order), else cue 1.
             const startId = liveCues.find((c) => selectedIds.has(c.id))?.id
             setSelectedIds(new Set())
             live.start(startId)
           }}
           isLive={live.isLive}
+          showLeaderLabel={!isShowLeader ? leader.leaderLabel : null}
           onOpenSettings={(tab) => {
             setSettingsTab(tab ?? 'display')
             setSettingsOpen(true)

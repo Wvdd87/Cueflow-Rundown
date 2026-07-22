@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/client'
 
@@ -27,12 +27,17 @@ export interface LiveBroadcast {
   isLive: boolean
 }
 
-/** Operator side: broadcast the live show state (incl. timing) to viewers. */
-export function useBroadcastLive(rundownId: string, live: LiveBroadcast) {
+/** Operator side: broadcast the live show state (incl. timing) to viewers.
+ *  `isLeader` gates whether this client's state is actually sent — with
+ *  collaboration links able to drive the show too, a non-leader's stale
+ *  "idle" state must never overwrite the current leader's live broadcast. */
+export function useBroadcastLive(rundownId: string, live: LiveBroadcast, isLeader: boolean = true) {
   const channelRef = useRef<RealtimeChannel | null>(null)
   const subscribedRef = useRef(false)
   const liveRef = useRef(live)
   liveRef.current = live
+  const isLeaderRef = useRef(isLeader)
+  isLeaderRef.current = isLeader
 
   useEffect(() => {
     const supa = createClient()
@@ -57,6 +62,7 @@ export function useBroadcastLive(rundownId: string, live: LiveBroadcast) {
     // Skip until the channel has actually joined — sending earlier falls back
     // to an HTTP POST that gets aborted by the go-live re-render (ERR_ABORTED).
     if (!subscribedRef.current) return
+    if (!isLeaderRef.current) return
     const l = liveRef.current
     channelRef.current?.send({
       type: 'broadcast',
@@ -72,11 +78,11 @@ export function useBroadcastLive(rundownId: string, live: LiveBroadcast) {
     })
   }
 
-  // Send immediately whenever the active cue or run status changes.
+  // Send immediately whenever the active cue, run status, or leadership changes.
   useEffect(() => {
     send()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [live.activeCueId, live.status])
+  }, [live.activeCueId, live.status, isLeader])
 
   // Re-broadcast every second while live so countdowns stay synced and
   // late-joining guests catch up.
@@ -85,7 +91,7 @@ export function useBroadcastLive(rundownId: string, live: LiveBroadcast) {
     const id = setInterval(send, 1000)
     return () => clearInterval(id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [live.isLive])
+  }, [live.isLive, isLeader])
 }
 
 /** Viewer side: subscribe to the operator's live show state. */
@@ -120,4 +126,38 @@ export function useLiveSubscription(rundownId: string): LiveSyncState {
   }, [rundownId])
 
   return state
+}
+
+export interface LeaderState {
+  /** null = the owner is driving (the default); otherwise a collaboration link id. */
+  leaderToken: string | null
+  leaderLabel: string
+}
+
+/** Who currently has show control. Polled (leadership changes are rare and
+ *  only matter at the idle→running transition) rather than pushed over the
+ *  broadcast channel, to avoid a second realtime wiring for a low-frequency
+ *  value. Both the owner's editor and collaborator views use this to decide
+ *  whether their own `useBroadcastLive` should actually send. */
+export function useLeaderState(rundownId: string): LeaderState & { refresh: () => void } {
+  const [state, setState] = useState<LeaderState>({ leaderToken: null, leaderLabel: 'Owner' })
+
+  const refresh = useCallback(() => {
+    const supa = createClient()
+    ;(supa.rpc as unknown as (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }>)(
+      'get_rundown_leader',
+      { p_rundown_id: rundownId }
+    ).then(({ data }) => {
+      const d = data as { leaderToken?: string | null; leaderLabel?: string } | null
+      if (d) setState({ leaderToken: d.leaderToken ?? null, leaderLabel: d.leaderLabel ?? 'Owner' })
+    })
+  }, [rundownId])
+
+  useEffect(() => {
+    refresh()
+    const id = setInterval(refresh, 5000)
+    return () => clearInterval(id)
+  }, [refresh])
+
+  return { ...state, refresh }
 }

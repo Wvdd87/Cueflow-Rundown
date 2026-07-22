@@ -4,7 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import Image from 'next/image'
 import { buildCueLayout, formatCueNumber } from '@/components/rundown/cueTree'
-import { useLiveSubscription, type LiveSyncState } from '@/components/rundown/liveSync'
+import { useLiveSubscription, useLeaderState, useBroadcastLive, type LiveSyncState } from '@/components/rundown/liveSync'
+import { useLiveShow } from '@/components/rundown/useLiveShow'
+import { TransportBar } from '@/components/rundown/TransportBar'
 import {
   calculateTimings,
   formatMsToTimeDisplay,
@@ -17,7 +19,8 @@ import { CF, textOn } from '@/components/rundown/layout'
 import { RichNoteCell } from '@/components/rundown/RichNoteCell'
 import { StatusBadge } from '@/components/StatusBadge'
 import { cn, inlineHtml, stripHtml } from '@/lib/utils'
-import { collabUpsertCell, collabAddCue, collabDeleteCue } from '@/app/actions/collab'
+import { collabUpsertCell, collabAddCue, collabDeleteCue, collabUpdateTitle, collabTakeControl } from '@/app/actions/collab'
+import { CollabMentionsVariablesDialog } from './CollabMentionsVariablesDialog'
 import { toast } from 'sonner'
 import {
   DropdownMenu,
@@ -25,7 +28,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Lock, ArrowUpToLine, Plus, Trash2, ChevronDown, X } from 'lucide-react'
+import { Lock, ArrowUpToLine, Plus, Trash2, ChevronDown, X, AtSign, FileDown, FileSpreadsheet, Play } from 'lucide-react'
 import type { Rundown, Column, Cue, Cell, Variable, Mention } from '@/lib/supabase/types'
 
 export interface CollabPermissions {
@@ -58,7 +61,7 @@ function tile(width: number, bg: string, extra?: React.CSSProperties): React.CSS
 }
 
 export function CollabRundownView({ data, token }: { data: CollabData; token: string }) {
-  const { rundown, collab, columns = [], cues: initialCues = [], cells: initialCells = [], variables = [], mentions = [] } = data
+  const { rundown, collab, columns = [], cues: initialCues = [], cells: initialCells = [] } = data
   const live = useLiveSubscription(rundown.id)
   const scrollRef = useRef<HTMLDivElement>(null)
   const activeRowRef = useRef<HTMLDivElement>(null)
@@ -67,20 +70,68 @@ export function CollabRundownView({ data, token }: { data: CollabData; token: st
   const [cellMap, setCellMap] = useState<Record<string, string>>(() =>
     Object.fromEntries(initialCells.map((c) => [`${c.cue_id}:${c.column_id}`, c.content ?? '']))
   )
+  const [variables, setVariables] = useState<Variable[]>(data.variables ?? [])
+  const [mentions, setMentions] = useState<Mention[]>(data.mentions ?? [])
+  const [mentionsOpen, setMentionsOpen] = useState(false)
   const [adding, setAdding] = useState(false)
 
-  const isLive = live.status === 'running' || live.status === 'paused'
+  // ── Show control ── a collaborator with canRunShow can drive the live show,
+  // but only one leader (owner or a collab link) broadcasts at a time.
+  const leader = useLeaderState(rundown.id)
+  const isLeader = collab.canRunShow && leader.leaderToken === token
+  const liveCues = useMemo(() => cues.filter((c) => c.cue_type !== 'heading'), [cues])
+  const myShow = useLiveShow(liveCues)
+  const [takingControl, setTakingControl] = useState(false)
+  useBroadcastLive(rundown.id, {
+    activeCueId: myShow.activeCueId,
+    nextCueId: myShow.nextCueId,
+    status: myShow.status,
+    elapsedMs: myShow.elapsedMs,
+    durationMs: myShow.activeDurationMs,
+    isLive: myShow.isLive,
+  }, isLeader)
+
+  // Display always reflects the current leader's state: this collaborator's
+  // own (zero-latency) state while they're driving, otherwise the broadcast.
+  const effectiveLive: LiveSyncState = isLeader
+    ? {
+        activeCueId: myShow.activeCueId,
+        nextCueId: myShow.nextCueId,
+        status: myShow.status,
+        elapsedMs: myShow.elapsedMs,
+        durationMs: myShow.activeDurationMs,
+        sentAt: Date.now(),
+      }
+    : live
+
+  async function handleRunShow() {
+    setTakingControl(true)
+    try {
+      const r = await collabTakeControl(token)
+      if (r.error) return toast.error(r.error)
+      leader.refresh()
+      myShow.start()
+    } finally {
+      setTakingControl(false)
+    }
+  }
+
+  const isLive = effectiveLive.status === 'running' || effectiveLive.status === 'paused'
   const [following, setFollowing] = useState(true)
   const programmaticScrollRef = useRef(false)
 
   const editableSet = useMemo(() => new Set(collab.editableColumns), [collab.editableColumns])
   const varMap = useMemo(() => Object.fromEntries(variables.map((v) => [v.key, v.value])), [variables])
-  const mentionMap = useMemo(() => Object.fromEntries((mentions ?? []).map((m) => [m.id, m])), [mentions])
+  const mentionMap = useMemo(() => Object.fromEntries(mentions.map((m) => [m.id, m])), [mentions])
   const layout = useMemo(() => buildCueLayout(cues), [cues])
   const timedMap = useMemo(() => {
     const timed = calculateTimings(layout.docOrder)
     return Object.fromEntries(timed.map((t) => [t.id, t])) as Record<string, CueTimingOutput>
   }, [layout])
+  const timedLiveCues = useMemo(
+    () => liveCues.map((c) => timedMap[c.id]).filter((c): c is CueTimingOutput => !!c),
+    [liveCues, timedMap]
+  )
 
   const rowWidth = useMemo(() => {
     const colW = columns.reduce((s, c) => s + c.width, 0)
@@ -103,13 +154,13 @@ export function CollabRundownView({ data, token }: { data: CollabData; token: st
   }, [scrollRowToTop])
 
   useEffect(() => {
-    if (!following || !live.activeCueId) return
+    if (!following || !effectiveLive.activeCueId) return
     if (activeRowRef.current) scrollRowToTop(activeRowRef.current)
-  }, [live.activeCueId, following, scrollRowToTop])
+  }, [effectiveLive.activeCueId, following, scrollRowToTop])
 
   useEffect(() => {
-    if (live.status === 'idle') setFollowing(true)
-  }, [live.status])
+    if (effectiveLive.status === 'idle') setFollowing(true)
+  }, [effectiveLive.status])
 
   useEffect(() => {
     const cont = scrollRef.current
@@ -131,6 +182,15 @@ export function CollabRundownView({ data, token }: { data: CollabData; token: st
       setCellMap((prev) => ({ ...prev, [`${cueId}:${columnId}`]: content }))
       const r = await collabUpsertCell(token, cueId, columnId, content)
       if (r.error) toast.error('Could not save — this column may no longer be editable')
+    },
+    [token]
+  )
+
+  const handleTitleSave = useCallback(
+    async (cueId: string, title: string) => {
+      setCues((prev) => prev.map((c) => (c.id === cueId ? { ...c, title } : c)))
+      const r = await collabUpdateTitle(token, cueId, title)
+      if (r.error) toast.error('Could not save the title')
     },
     [token]
   )
@@ -161,7 +221,11 @@ export function CollabRundownView({ data, token }: { data: CollabData; token: st
       const raw = cellMap[`${cueId}:${col.id}`] ?? ''
       const editable = editableSet.has(col.id)
       return (
-        <div key={col.id} style={tile(col.width, baseBg, { padding: editable ? '10px 4px' : '10px 8px' })}>
+        <div
+          key={col.id}
+          data-col-id={col.id}
+          style={tile(col.width, baseBg, { padding: editable ? '10px 4px' : '10px 8px' })}
+        >
           {editable ? (
             col.col_type === 'dropdown' ? (
               <CollabDropdownCell
@@ -194,12 +258,52 @@ export function CollabRundownView({ data, token }: { data: CollabData; token: st
         <Image src="/icon-512.png" alt="Cueflow" width={30} height={30} className="shrink-0" />
         <h1 className="font-semibold text-[15px] text-[#eef0f3] truncate">{rundown.name}</h1>
         <StatusBadge status={rundown.status} />
-        {live.status === 'running' && (
+        {effectiveLive.status === 'running' && (
           <span className="flex items-center gap-1 font-cond text-[10px] font-medium uppercase tracking-[0.1em] text-[#9ba0ab]" title="Show is live">
             <span className="w-[5px] h-[5px] rounded-full bg-[#ff2848]" /> Live
           </span>
         )}
+        {isLive && !isLeader && (
+          <span className="font-cond text-[10px] font-bold uppercase tracking-[0.1em] text-[#7c7e8a]">
+            {leader.leaderLabel} is running the show
+          </span>
+        )}
+
         <div className="ml-auto flex items-center gap-3">
+          {collab.canRunShow && !isLive && (
+            <button
+              data-testid="collab-run-show"
+              onClick={handleRunShow}
+              disabled={takingControl}
+              className="inline-flex items-center gap-2 h-8 px-3.5 font-cond text-[10.5px] font-bold uppercase tracking-[0.12em] bg-[#f0a838] text-[#06060a] border border-[#f0a838] hover:bg-[#ffba50] transition-colors disabled:opacity-60"
+            >
+              <Play className="w-3 h-3 fill-[#06060a]" /> {takingControl ? 'Starting…' : 'Run show'}
+            </button>
+          )}
+          <button
+            data-testid="collab-mentions-btn"
+            onClick={() => setMentionsOpen(true)}
+            title="Mentions & variables"
+            className="w-8 h-8 flex items-center justify-center text-[#9ba0ab] hover:text-[#eef0f3] hover:bg-[#16161c] transition-colors"
+          >
+            <AtSign className="w-4 h-4" />
+          </button>
+          <a
+            href={`/share/collab/${token}/export/pdf`}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Export PDF"
+            className="w-8 h-8 flex items-center justify-center text-[#9ba0ab] hover:text-[#eef0f3] hover:bg-[#16161c] transition-colors"
+          >
+            <FileDown className="w-4 h-4" />
+          </a>
+          <a
+            href={`/share/collab/${token}/export/csv`}
+            title="Export CSV"
+            className="w-8 h-8 flex items-center justify-center text-[#9ba0ab] hover:text-[#eef0f3] hover:bg-[#16161c] transition-colors"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+          </a>
           {showDate && <span className="font-mono text-xs text-[#888b96]">{showDate}</span>}
           <span
             data-testid="collab-label-badge"
@@ -210,7 +314,18 @@ export function CollabRundownView({ data, token }: { data: CollabData; token: st
         </div>
       </header>
 
-      {isLive && <CollabLiveProgress live={live} />}
+      {isLeader && myShow.isLive && <TransportBar live={myShow} cues={timedLiveCues} />}
+      {isLive && !isLeader && <CollabLiveProgress live={effectiveLive} />}
+
+      <CollabMentionsVariablesDialog
+        token={token}
+        open={mentionsOpen}
+        onOpenChange={setMentionsOpen}
+        mentions={mentions}
+        variables={variables}
+        setMentions={setMentions}
+        setVariables={setVariables}
+      />
 
       <div ref={scrollRef} data-cue-scroll className="flex-1 overflow-auto">
         <div className="inline-block min-w-full align-top">
@@ -251,12 +366,13 @@ export function CollabRundownView({ data, token }: { data: CollabData; token: st
                         cue={timedMap[ch.id] ?? (ch as CueTimingOutput)}
                         displayNumber={fmtNum(layout.numberOf[ch.id] ?? '', rundown)}
                         depth={1}
-                        live={live}
-                        activeRef={live.activeCueId === ch.id ? activeRowRef : undefined}
+                        live={effectiveLive}
+                        activeRef={effectiveLive.activeCueId === ch.id ? activeRowRef : undefined}
                         timeFormat={rundown.time_display ?? 'auto'}
                         renderCells={renderCells}
                         canDelete={collab.canAddDeleteCues}
                         onDelete={() => handleDeleteCue(ch.id)}
+                        onTitleSave={(title) => handleTitleSave(ch.id, title)}
                       />
                     ))}
                   </div>
@@ -269,12 +385,13 @@ export function CollabRundownView({ data, token }: { data: CollabData; token: st
                   cue={cue}
                   displayNumber={fmtNum(item.number, rundown)}
                   depth={0}
-                  live={live}
-                  activeRef={live.activeCueId === item.cue.id ? activeRowRef : undefined}
+                  live={effectiveLive}
+                  activeRef={effectiveLive.activeCueId === item.cue.id ? activeRowRef : undefined}
                   timeFormat={rundown.time_display ?? 'auto'}
                   renderCells={renderCells}
                   canDelete={collab.canAddDeleteCues}
                   onDelete={() => handleDeleteCue(item.cue.id)}
+                  onTitleSave={(title) => handleTitleSave(item.cue.id, title)}
                 />
               )
             })}
@@ -345,9 +462,10 @@ interface CollabCueRowProps {
   renderCells: (cueId: string, baseBg: string) => React.ReactNode
   canDelete: boolean
   onDelete: () => void
+  onTitleSave: (title: string) => void
 }
 
-function CollabCueRow({ cue, displayNumber, depth, live, activeRef, timeFormat, renderCells, canDelete, onDelete }: CollabCueRowProps) {
+function CollabCueRow({ cue, displayNumber, depth, live, activeRef, timeFormat, renderCells, canDelete, onDelete, onTitleSave }: CollabCueRowProps) {
   const isActive = live.activeCueId === cue.id
   const isNext = live.nextCueId === cue.id
   const isLive = live.status === 'running' || live.status === 'paused'
@@ -407,16 +525,14 @@ function CollabCueRow({ cue, displayNumber, depth, live, activeRef, timeFormat, 
           )}
         </div>
 
-        <div className="shrink-0 flex flex-col" style={{ width: TITLE_WIDTH, minHeight: CF.minRowH, background: baseBg, padding: '12px 16px' }}>
-          {stripHtml(cue.title) ? (
-            <span
-              className="tiptap-cell text-[16px] font-medium leading-[1.35] break-words [overflow-wrap:anywhere]"
-              style={{ color: ct.hi }}
-              dangerouslySetInnerHTML={{ __html: inlineHtml(cue.title) }}
-            />
-          ) : (
-            <span className="text-[16px] font-medium leading-[1.35] italic" style={{ color: '#6b6d78' }}>Untitled cue</span>
-          )}
+        <div className="shrink-0 flex flex-col justify-center" style={{ width: TITLE_WIDTH, minHeight: CF.minRowH, background: baseBg, padding: '4px 4px' }}>
+          <RichNoteCell
+            value={cue.title}
+            onSave={onTitleSave}
+            accent="#f0a838"
+            textColor={ct.hi}
+            placeholder="Untitled cue"
+          />
         </div>
 
         {renderCells(cue.id, baseBg)}

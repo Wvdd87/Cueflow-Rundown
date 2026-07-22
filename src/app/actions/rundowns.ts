@@ -286,6 +286,18 @@ export async function updateRundownStatus(
   return { success: true }
 }
 
+/** Reclaim show control from whoever currently holds it (owner or a
+ *  collaboration link) — see `rundown_leader` / schema_phase21.sql. */
+export async function takeShowControl(rundownId: string) {
+  const { supabase } = await getTeamId()
+  const { error } = await (supabase.rpc as unknown as (
+    fn: string,
+    args: Record<string, unknown>
+  ) => Promise<{ error: unknown }>)('take_show_control', { p_rundown_id: rundownId })
+  if (error) return { error: String(error) }
+  return { success: true }
+}
+
 /** Soft-delete: moves the rundown to Trash (recoverable). */
 export async function deleteRundown(id: string) {
   const { supabase } = await getTeamId()
