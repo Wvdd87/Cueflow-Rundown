@@ -191,6 +191,16 @@ export function RundownEditor({
   cuesRef.current = cues
   // Prevents double-submit when add buttons are clicked rapidly
   const addingRef = useRef(false)
+  // A newly-added cue is first rendered with a temporary client-side id, then
+  // swapped for the real DB id once the insert resolves. Without this map, that
+  // swap changes the row's React key, which unmounts/remounts CueRow — dropping
+  // whatever the user had already started typing into the still-open editor.
+  // This keeps the row's render key stable across the swap.
+  const cueRenderKeyRef = useRef<Map<string, string>>(new Map())
+  const getRenderKey = useCallback(
+    (id: string) => cueRenderKeyRef.current.get(id) ?? id,
+    []
+  )
   // Tracks which half (top/bottom) the dragged item is over during a drag
   const dragHalfRef = useRef<'top' | 'bottom'>('bottom')
 
@@ -590,15 +600,25 @@ export function RundownEditor({
     }
     setCues((prev) => [...prev, optimisticCue])
     setFocusCueId(optimisticCue.id)
+    cueRenderKeyRef.current.set(optimisticCue.id, optimisticCue.id)
     try {
       const result = await addCue(rundown.id, maxPos)
       if (result.error) {
         toast.error(result.error)
         setCues((prev) => prev.filter((c) => c.id !== optimisticCue.id))
         setFocusCueId(null)
+        cueRenderKeyRef.current.delete(optimisticCue.id)
       } else if (result.cue) {
         const realCue = normalizeCue(result.cue)
-        setCues((prev) => prev.map((c) => (c.id === optimisticCue.id ? realCue : c)))
+        const stableKey = cueRenderKeyRef.current.get(optimisticCue.id) ?? optimisticCue.id
+        cueRenderKeyRef.current.delete(optimisticCue.id)
+        cueRenderKeyRef.current.set(realCue.id, stableKey)
+        // Merge onto whatever is currently in local state (not `realCue` wholesale) —
+        // the user may have already typed into and confirmed the title while the
+        // insert was in flight, and that edit must win over the DB's empty value.
+        setCues((prev) => prev.map((c) => (c.id === optimisticCue.id
+          ? { ...c, id: realCue.id, cue_number: realCue.cue_number, position: realCue.position, created_at: realCue.created_at, updated_at: realCue.updated_at }
+          : c)))
         setFocusCueId(realCue.id)
         history.push({
           label: 'Add cue',
@@ -645,15 +665,22 @@ export function RundownEditor({
     }
     setCues((prev) => [...prev, optimisticCue])
     setFocusCueId(optimisticCue.id)
+    cueRenderKeyRef.current.set(optimisticCue.id, optimisticCue.id)
     try {
       const result = await addHeading(rundown.id, maxPos)
       if (result.error) {
         toast.error(result.error)
         setCues((prev) => prev.filter((c) => c.id !== optimisticCue.id))
         setFocusCueId(null)
+        cueRenderKeyRef.current.delete(optimisticCue.id)
       } else if (result.cue) {
         const realCue = normalizeCue(result.cue)
-        setCues((prev) => prev.map((c) => (c.id === optimisticCue.id ? realCue : c)))
+        const stableKey = cueRenderKeyRef.current.get(optimisticCue.id) ?? optimisticCue.id
+        cueRenderKeyRef.current.delete(optimisticCue.id)
+        cueRenderKeyRef.current.set(realCue.id, stableKey)
+        setCues((prev) => prev.map((c) => (c.id === optimisticCue.id
+          ? { ...c, id: realCue.id, cue_number: realCue.cue_number, position: realCue.position, created_at: realCue.created_at, updated_at: realCue.updated_at }
+          : c)))
         setFocusCueId(realCue.id)
         history.push({
           label: 'Add heading',
@@ -1113,7 +1140,7 @@ export function RundownEditor({
         : undefined
     return (
       <CueRow
-        key={cue.id}
+        key={getRenderKey(cue.id)}
         cue={cue}
         displayNumber={displayNumber}
         timeFormat={rundownSettings.time_display}
@@ -1324,7 +1351,7 @@ export function RundownEditor({
                       : item.children
                     if (!headingVisible && visibleChildren.length === 0) return null
                     return (
-                      <Fragment key={item.heading.id}>
+                      <Fragment key={getRenderKey(item.heading.id)}>
                         {headingVisible && (
                           <GroupHeaderRow
                             heading={item.heading}
