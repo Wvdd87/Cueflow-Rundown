@@ -52,6 +52,8 @@ interface GroupHeaderRowProps {
   onConvertToCue?: (id: string) => void
   onAddAbove?: (id: string) => void
   onAddBelow?: (id: string) => void
+  focused?: boolean
+  onCellFocus?: (id: string, colId: string) => void
 }
 
 const MI = 'gap-2.5 px-3.5 py-2.5 font-cond text-[11px] font-bold uppercase tracking-[0.1em] text-[#c8c9d0] focus:bg-[#16161c] focus:text-[#eef0f3] cursor-pointer'
@@ -73,6 +75,8 @@ export function GroupHeaderRow({
   onConvertToCue,
   onAddAbove,
   onAddBelow,
+  focused = false,
+  onCellFocus,
 }: GroupHeaderRowProps) {
   const isGroup = aggregate.count > 0
   const [editing, setEditing] = useState(false)
@@ -127,6 +131,9 @@ export function GroupHeaderRow({
       className="flex items-stretch"
       data-cue-id={heading.id}
       onClick={(e) => e.stopPropagation()}
+      onClickCapture={(e) => {
+        if ((e.target as HTMLElement).closest('[data-col-id]')) onCellFocus?.(heading.id, 'title')
+      }}
     >
       {/* Control gutter */}
       <div
@@ -232,7 +239,12 @@ export function GroupHeaderRow({
         </div>
 
         {/* Title + (group) aggregate */}
-        <div className="flex-1 min-w-0 pl-1">
+        <div
+          data-row-id={heading.id}
+          data-col-id="title"
+          className="flex-1 min-w-0 pl-1"
+          style={focused ? { boxShadow: 'inset 0 0 0 2px #f0a838' } : undefined}
+        >
           {editing ? (
             <input
               autoFocus
@@ -245,6 +257,7 @@ export function GroupHeaderRow({
             />
           ) : (
             <button
+              data-cell-trigger
               onClick={() => setEditing(true)}
               className="text-left w-full break-words [overflow-wrap:anywhere]"
               style={{

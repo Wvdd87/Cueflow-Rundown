@@ -120,6 +120,7 @@ export function DropdownCell({
             render={
               <button
                 data-testid="dropdown-trigger"
+                data-cell-trigger
                 className="w-full flex items-center justify-between gap-1 px-1.5 py-1 hover:bg-[#1d1d24]/50 transition-colors"
               />
             }
@@ -131,13 +132,14 @@ export function DropdownCell({
         </DropdownMenu>
       ) : (
         <>
-          {values.map((v) => (
+          {values.map((v, i) => (
             <div key={v} className="flex items-center gap-1 w-full group/badge">
               <DropdownMenu>
                 <DropdownMenuTrigger
                   render={
                     <button
                       data-testid="dropdown-badge"
+                      data-cell-trigger={i === 0 ? true : undefined}
                       title="Click to change selection"
                       className="flex-1 min-w-0 text-left text-[12.5px] px-2.5 py-[5px] text-white font-semibold break-words [overflow-wrap:anywhere] hover:brightness-110 transition-[filter] cursor-pointer"
                       style={{ backgroundColor: optionColors?.[v] ?? 'rgba(63,63,70,0.85)' }}

@@ -57,7 +57,7 @@ export function RichNoteCell({
 
   if (empty) {
     return (
-      <div data-testid={testId} onClick={() => setEditing(true)} className={cls} style={style}>
+      <div data-testid={testId} data-cell-trigger onClick={() => setEditing(true)} className={cls} style={style}>
         {placeholder}
       </div>
     )
@@ -65,6 +65,7 @@ export function RichNoteCell({
   return (
     <div
       data-testid={testId}
+      data-cell-trigger
       onClick={() => setEditing(true)}
       className={cls}
       style={style}
@@ -90,7 +91,7 @@ function NoteTipTap({
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
-      StarterKit.configure({ heading: false }),
+      StarterKit.configure({ heading: false, hardBreak: false }),
       Heading.configure({ levels: [1, 2, 3] }),
       TextStyle,
       Color,

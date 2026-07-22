@@ -38,6 +38,7 @@ export function InlineTipTap({
         bulletList: false,
         orderedList: false,
         listItem: false,
+        hardBreak: false,
       }),
       HeadingSize,
       TextStyle,

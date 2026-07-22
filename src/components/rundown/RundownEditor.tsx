@@ -55,6 +55,8 @@ import { emptyFilters, hasActiveFilters, computeCueVisibility, type CueFilterSta
 import { RundownDataProvider } from './RundownDataContext'
 import type { RundownSettings } from './RundownDataContext'
 import { useSaveStatus } from './useSaveStatus'
+import { useGridNavigation } from './useGridNavigation'
+import { KeyboardShortcutsDialog } from './KeyboardShortcutsDialog'
 import { buildCueLayout, formatCueNumber } from './cueTree'
 import { CF, totalRowWidth } from './layout'
 import { useLiveShow } from './useLiveShow'
@@ -990,6 +992,19 @@ export function RundownEditor({
     [visibleOrderIds, visibility]
   )
 
+  const gridNav = useGridNavigation({
+    cues,
+    visibleColumns,
+    titleIndex,
+    privateNotesIndex,
+    renderableIds,
+    collapsedGroups,
+    setCollapsedGroups,
+    onAddCueBelow: (id) => handleAddCueAt(id, 'below'),
+    onAddCueAtEnd: handleAddCue,
+  })
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
+
   async function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event
     if (!over || active.id === over.id) return
@@ -1117,6 +1132,8 @@ export function RundownEditor({
         onAddBelow={(id) => handleAddCueAt(id, 'below')}
         onDuplicate={handleDuplicateSingle}
         duplicating={duplicatingIds.has(cue.id)}
+        focusedColId={gridNav.focusedCell?.cueId === cue.id ? gridNav.focusedCell.colId : null}
+        onCellFocus={gridNav.focusCell}
         onRemoveFromGroup={handleRemoveFromGroup}
         onCellChange={handleCellChange}
         onCellAttachmentsChange={handleCellAttachmentsChange}
@@ -1182,6 +1199,7 @@ export function RundownEditor({
             toast.success('Rundown timing reset')
           }}
           onOpenTrash={() => setTrashOpen(true)}
+          onOpenShortcuts={() => setShortcutsOpen(true)}
           searchCues={searchCues}
           onSearchSelect={handleSearchSelect}
           status={rundownStatus}
@@ -1325,6 +1343,8 @@ export function RundownEditor({
                             onConvertToCue={handleConvertToCue}
                             onAddAbove={(id) => handleAddCueAtHeading(id, 'above')}
                             onAddBelow={(id) => handleAddCueAtHeading(id, 'below')}
+                            focused={gridNav.focusedCell?.cueId === item.heading.id}
+                            onCellFocus={gridNav.focusCell}
                           />
                         )}
                         {(!headingVisible || !collapsed) &&
@@ -1476,6 +1496,8 @@ export function RundownEditor({
           onScrollToCue={handleScrollToNotFinalCue}
           onConfirm={() => commitStatusChange('finalized')}
         />
+
+        <KeyboardShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
       </div>
     </RundownDataProvider>
   )

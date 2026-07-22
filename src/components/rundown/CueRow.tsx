@@ -99,6 +99,9 @@ interface CueRowProps {
   groupTitle?: string
   groupNumber?: string
   focusTitle?: boolean
+  /** Which column of this row currently has keyboard grid focus (null = none). */
+  focusedColId?: string | null
+  onCellFocus?: (cueId: string, colId: string) => void
 }
 
 const LABEL_FONT =
@@ -152,6 +155,8 @@ export function CueRow({
   groupTitle,
   groupNumber,
   focusTitle = false,
+  focusedColId = null,
+  onCellFocus,
 }: CueRowProps) {
   const { trackSave } = useRundownData()
   const [editingDuration, setEditingDuration] = useState(false)
@@ -269,6 +274,10 @@ export function CueRow({
     // content is top-aligned within the row
     return { width, minHeight: CF.minRowH, flexShrink: 0, background: baseCellBg, display: 'flex', alignItems: 'flex-start', padding: '12px 14px', ...extra }
   }
+  // Amber inset ring for the cell that currently has keyboard grid focus.
+  function ringStyle(colId: string): React.CSSProperties {
+    return focusedColId === colId ? { boxShadow: 'inset 0 0 0 2px #f0a838', position: 'relative', zIndex: 1 } : {}
+  }
 
   const labelIndent = CF.rowPad + CF.c1 + CF.gap // 66
 
@@ -284,6 +293,10 @@ export function CueRow({
       style={style}
       data-cue-id={cue.id}
       onClick={(e) => e.stopPropagation()}
+      onClickCapture={(e) => {
+        const colId = (e.target as HTMLElement).closest('[data-col-id]')?.getAttribute('data-col-id')
+        if (colId) onCellFocus?.(cue.id, colId)
+      }}
     >
       {/* Parent group — shown above the current-cue indicator so a sub-cue's
           group context (e.g. "3 — YOUNG VITO") stays visible once it's pinned to the top */}
@@ -462,7 +475,10 @@ export function CueRow({
 
         {/* Start time */}
         <div
-          style={tile(CF.start, { flexDirection: 'column', justifyContent: 'flex-start', alignItems: 'flex-start', gap: 2, cursor: isHard || isFirst ? 'text' : 'default', position: 'relative' })}
+          data-row-id={cue.id}
+          data-col-id="start"
+          data-cell-trigger
+          style={{ ...tile(CF.start, { flexDirection: 'column', justifyContent: 'flex-start', alignItems: 'flex-start', gap: 2, cursor: isHard || isFirst ? 'text' : 'default', position: 'relative' }), ...ringStyle('start') }}
           onClick={() => (isHard || isFirst) && startStartEdit()}
           title={isHard ? 'Hard start — click to edit time' : isFirst ? 'Show start (anchor) — click to edit' : 'Soft start — derived from the previous cue'}
         >
@@ -507,7 +523,10 @@ export function CueRow({
 
         {/* Duration */}
         <div
-          style={tile(CF.dur, { flexDirection: 'column', justifyContent: 'flex-start', alignItems: 'flex-start', gap: 1, cursor: 'text', position: 'relative' })}
+          data-row-id={cue.id}
+          data-col-id="dur"
+          data-cell-trigger
+          style={{ ...tile(CF.dur, { flexDirection: 'column', justifyContent: 'flex-start', alignItems: 'flex-start', gap: 1, cursor: 'text', position: 'relative' }), ...ringStyle('dur') }}
           onClick={() => !editingDuration && !(isActive && live) && startDurationEdit()}
         >
           {editingDuration ? (
@@ -586,7 +605,12 @@ export function CueRow({
         {(() => {
           const leftCols = columns.slice(0, titleIndex)
           return leftCols.map((col) => (
-            <div key={col.id} style={tile(col.width, { padding: '10px 2px' })}>
+            <div
+              key={col.id}
+              data-row-id={cue.id}
+              data-col-id={col.id}
+              style={{ ...tile(col.width, { padding: '10px 2px' }), ...ringStyle(col.id) }}
+            >
               {col.col_type === 'dropdown' ? (
                 <DropdownCell
                   cueId={cue.id}
@@ -613,7 +637,12 @@ export function CueRow({
         })()}
 
         {/* Title + subtitle */}
-        <div className="group/title shrink-0 flex flex-col" style={{ width: titleWidth, minHeight: CF.minRowH, background: baseCellBg, padding: '12px 16px' }}>
+        <div
+          data-row-id={cue.id}
+          data-col-id="title"
+          className="group/title shrink-0 flex flex-col"
+          style={{ width: titleWidth, minHeight: CF.minRowH, background: baseCellBg, padding: '12px 16px', ...ringStyle('title') }}
+        >
           {cue.not_final && (
             <span
               data-testid="not-final-badge"
@@ -633,6 +662,7 @@ export function CueRow({
             />
           ) : (
             <button
+              data-cell-trigger
               onClick={() => setEditingTitle(true)}
               className="text-[16px] font-medium text-left w-full leading-[1.35] break-words [overflow-wrap:anywhere] transition-colors"
               style={{ color: cue.title ? ct.hi : (cue.background_color ? ct.mid : '#6b6d78') }}
@@ -690,7 +720,12 @@ export function CueRow({
           return mergedIds.map((id) => {
             if (id === PRIVATE_NOTES_ID) {
               return (
-                <div key={PRIVATE_NOTES_ID} style={tile(privateNotesWidth, { padding: '10px 2px' })}>
+                <div
+                  key={PRIVATE_NOTES_ID}
+                  data-row-id={cue.id}
+                  data-col-id={PRIVATE_NOTES_ID}
+                  style={{ ...tile(privateNotesWidth, { padding: '10px 2px' }), ...ringStyle(PRIVATE_NOTES_ID) }}
+                >
                   <PrivateNoteCell
                     cueId={cue.id}
                     rundownId={rundownId}
@@ -703,7 +738,12 @@ export function CueRow({
             const col = rightCols.find((c) => c.id === id)
             if (!col) return null
             return (
-              <div key={col.id} style={tile(col.width, { padding: '10px 2px' })}>
+              <div
+                key={col.id}
+                data-row-id={cue.id}
+                data-col-id={col.id}
+                style={{ ...tile(col.width, { padding: '10px 2px' }), ...ringStyle(col.id) }}
+              >
                 {col.col_type === 'dropdown' ? (
                   <DropdownCell
                     cueId={cue.id}

@@ -21,6 +21,7 @@ import {
   Undo2,
   Redo2,
   Loader2,
+  Keyboard,
 } from 'lucide-react'
 import {
   renameRundown,
@@ -57,6 +58,7 @@ interface RundownHeaderProps {
   onOpenMentions: (tab?: 'mentions' | 'variables') => void
   onResetTiming: () => void
   onOpenTrash: () => void
+  onOpenShortcuts: () => void
   canUndo: boolean
   canRedo: boolean
   undoLabel?: string
@@ -96,6 +98,7 @@ export function RundownHeader({
   onOpenMentions,
   onResetTiming,
   onOpenTrash,
+  onOpenShortcuts,
   canUndo,
   canRedo,
   undoLabel,
@@ -257,6 +260,14 @@ export function RundownHeader({
           className="w-8 h-8 flex items-center justify-center text-[#9ba0ab] hover:text-[#eef0f3] hover:bg-[#16161c] transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
         >
           <Redo2 className="w-4 h-4" />
+        </button>
+        <button
+          data-testid="keyboard-shortcuts-btn"
+          onClick={onOpenShortcuts}
+          title="Keyboard shortcuts"
+          className="w-8 h-8 flex items-center justify-center text-[#9ba0ab] hover:text-[#eef0f3] hover:bg-[#16161c] transition-colors"
+        >
+          <Keyboard className="w-4 h-4" />
         </button>
       </div>
 

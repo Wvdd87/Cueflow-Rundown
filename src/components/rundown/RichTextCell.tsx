@@ -101,6 +101,7 @@ export function RichTextCell({
     return (
       <div
         data-testid="richtext-cell"
+        data-cell-trigger
         onClick={() => setEditing(true)}
         className="tiptap-cell w-full min-h-[28px] px-2 py-1 text-sm text-[#c8c9d0] cursor-text hover:bg-[#1d1d24]/40 break-words"
       >
@@ -200,6 +201,7 @@ function CellDisplay({
       <div
         data-testid="richtext-cell"
         data-lightbox="1"
+        data-cell-trigger
         onClick={handleClick}
         onMouseOver={handleMouseMove}
         onMouseMove={handleMouseMove}
@@ -291,7 +293,7 @@ function CellTipTap({
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
-      StarterKit.configure({ heading: false }),
+      StarterKit.configure({ heading: false, hardBreak: false }),
       Heading.configure({ levels: [1, 2, 3] }),
       HeadingSize,
       TextStyle,
