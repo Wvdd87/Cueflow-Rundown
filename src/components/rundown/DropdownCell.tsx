@@ -8,7 +8,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { upsertCell } from '@/app/actions/cues'
 import { uploadCellFile } from '@/lib/upload'
 import { ImageLightbox } from './ImageLightbox'
 import { useRundownData } from './RundownDataContext'
@@ -42,7 +41,8 @@ export function DropdownCell({
   onContentChange,
   onAttachmentsChange,
 }: DropdownCellProps) {
-  const { trackSave } = useRundownData()
+  const { trackSave, actions, collab } = useRundownData()
+  const locked = !!collab && !collab.editableColumns.includes(columnId)
   const values = parseValues(value)
   const remaining = options.filter((o) => !values.includes(o))
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -52,13 +52,13 @@ export function DropdownCell({
   async function addValue(v: string) {
     const next = serializeValues([...values, v])
     onContentChange(cueId, columnId, next)
-    await trackSave(upsertCell(cueId, columnId, next, rundownId))
+    await trackSave(actions.upsertCell(cueId, columnId, next))
   }
 
   async function removeValue(v: string) {
     const next = serializeValues(values.filter((x) => x !== v))
     onContentChange(cueId, columnId, next)
-    await trackSave(upsertCell(cueId, columnId, next, rundownId))
+    await trackSave(actions.upsertCell(cueId, columnId, next))
   }
 
   /** Swap one selected value for another, in place — the fix for "can't change a
@@ -66,7 +66,7 @@ export function DropdownCell({
   async function replaceValue(oldV: string, newV: string) {
     const next = serializeValues(values.map((x) => (x === oldV ? newV : x)))
     onContentChange(cueId, columnId, next)
-    await trackSave(upsertCell(cueId, columnId, next, rundownId))
+    await trackSave(actions.upsertCell(cueId, columnId, next))
   }
 
   async function addAttachments(files: File[]) {
@@ -75,7 +75,7 @@ export function DropdownCell({
       const uploaded = await Promise.all(files.map((f) => uploadCellFile(rundownId, f)))
       const next = [...attachments, ...uploaded]
       onAttachmentsChange(cueId, columnId, next)
-      await trackSave(upsertCell(cueId, columnId, value, rundownId, next))
+      await trackSave(actions.upsertCell(cueId, columnId, value, next))
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Upload failed')
     } finally {
@@ -86,7 +86,24 @@ export function DropdownCell({
   async function removeAttachment(url: string) {
     const next = attachments.filter((a) => a.url !== url)
     onAttachmentsChange(cueId, columnId, next)
-    await trackSave(upsertCell(cueId, columnId, value, rundownId, next))
+    await trackSave(actions.upsertCell(cueId, columnId, value, next))
+  }
+
+  if (locked) {
+    return (
+      <div data-testid="dropdown-cell" className="w-full flex flex-col gap-1.5 py-0.5 opacity-70">
+        {values.map((v) => (
+          <span
+            key={v}
+            className="text-[12.5px] px-2.5 py-[5px] text-white font-semibold break-words [overflow-wrap:anywhere]"
+            style={{ backgroundColor: optionColors?.[v] ?? 'rgba(63,63,70,0.85)' }}
+          >
+            {v}
+          </span>
+        ))}
+        {values.length === 0 && <span className="text-[13px] text-[#5a5c66] italic">—</span>}
+      </div>
+    )
   }
 
   function optionList(list: string[], onSelect: (v: string) => void) {

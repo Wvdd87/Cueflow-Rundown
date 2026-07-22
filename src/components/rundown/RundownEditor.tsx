@@ -19,25 +19,14 @@ import {
   arrayMove,
 } from '@dnd-kit/sortable'
 import { restrictToVerticalAxis } from '@dnd-kit/modifiers'
-import {
-  addCue,
-  addHeading,
-  convertCueToHeading,
-  convertHeadingToCue,
-  updateCue,
-  reorderCues,
-  deleteCue,
-  deleteCues,
-  restoreCue,
-  setCuesBackground,
-  duplicateCues,
-  groupCues,
-  ungroupCues,
-  removeFromGroup,
-  getRundownCues,
-} from '@/app/actions/cues'
+// Group create/dissolve stay admin-only for now (see the `collab` prop docs
+// below) — everything else routes through the actions adapter.
+import { groupCues, ungroupCues } from '@/app/actions/cues'
 import { updateRundownStatus, takeShowControl } from '@/app/actions/rundowns'
 import { normalizeStatus, type RundownStatus } from '@/lib/rundownStatus'
+import { createAdminActions, createCollabActions } from './rundownActions'
+import { collabTakeControl } from '@/app/actions/collab'
+import type { CollabContext } from './RundownDataContext'
 import { useUndoHistory } from './useUndoHistory'
 import { RundownHeader } from './RundownHeader'
 import { ColumnHeaders } from './ColumnHeaders'
@@ -90,6 +79,16 @@ interface RundownEditorProps {
   initialMentions: Mention[]
   initialVariables: Variable[]
   initialPrivateNotes: Record<string, string>
+  /** Present when this editor is being rendered for a collaboration link
+   *  instead of the authenticated owner — see RundownDataContext's
+   *  CollabContext. Column edits are locked to `editableColumns`; group
+   *  create/dissolve and project-management controls (Settings, Trash,
+   *  Save as template, Share, rename rundown, Dashboard) are hidden.
+   *  Everything else (reorder/resize/rename columns, reorder/recolor/
+   *  duplicate/add/delete cues, scripts, durations, not-final, mentions
+   *  & variables, export, and — if canRunShow — driving the live show) is
+   *  fully available, matching the admin editor. */
+  collab?: CollabContext | null
 }
 
 // Per-user view state persisted in localStorage (not shared)
@@ -137,7 +136,12 @@ export function RundownEditor({
   initialMentions,
   initialVariables,
   initialPrivateNotes,
+  collab = null,
 }: RundownEditorProps) {
+  const actions = useMemo(
+    () => (collab ? createCollabActions(collab.token) : createAdminActions(rundown.id)),
+    [collab, rundown.id]
+  )
   const [cues, setCues] = useState<Cue[]>(() => initialCues.map(normalizeCue))
   const [columns, setColumns] = useState<Column[]>(initialColumns)
   const [cells, setCells] = useState<Record<string, string>>(() =>
@@ -464,7 +468,9 @@ export function RundownEditor({
   // A collaboration link with canRunShow can take control instead — this
   // gate stops our own idle/stale state from clobbering their broadcast.
   const leader = useLeaderState(rundown.id)
-  const isShowLeader = leader.leaderToken === null
+  const myLeaderIdentity = collab ? collab.token : null
+  const isShowLeader = leader.leaderToken === myLeaderIdentity
+  const canRunShow = !collab || collab.canRunShow
 
   // Broadcast the live show state (incl. timing) to read-only viewers
   useBroadcastLive(rundown.id, {
@@ -497,7 +503,7 @@ export function RundownEditor({
       setCues((prev) =>
         prev.map((c) => (c.id === next.id ? { ...c, auto_start: value } : c))
       )
-      updateCue(next.id, rundown.id, { auto_start: value })
+      actions.updateCue(next.id, { auto_start: value })
     },
     [liveCues, rundown.id]
   )
@@ -571,11 +577,11 @@ export function RundownEditor({
   )
 
   const refreshCues = useCallback(async () => {
-    const r = await getRundownCues(rundown.id)
+    const r = await actions.getRundownCues()
     setCues(r.cues.map(normalizeCue))
     setCells(cellsToMap(r.cells))
     setCellAttachments(cellAttachmentsToMap(r.cells))
-  }, [rundown.id])
+  }, [actions])
 
   // --- Add cue ---
   async function handleAddCue() {
@@ -608,7 +614,7 @@ export function RundownEditor({
     setFocusCueId(optimisticCue.id)
     cueRenderKeyRef.current.set(optimisticCue.id, optimisticCue.id)
     try {
-      const result = await addCue(rundown.id, maxPos)
+      const result = await actions.addCue(maxPos)
       if (result.error) {
         toast.error(result.error)
         setCues((prev) => prev.filter((c) => c.id !== optimisticCue.id))
@@ -630,10 +636,10 @@ export function RundownEditor({
           label: 'Add cue',
           undo: async () => {
             setCues((prev) => prev.filter((c) => c.id !== realCue.id))
-            await deleteCue(realCue.id, rundown.id)
+            await actions.deleteCue(realCue.id)
           },
           redo: async () => {
-            await restoreCue(realCue.id, rundown.id)
+            await actions.restoreCue(realCue.id)
             await refreshCues()
           },
         })
@@ -673,7 +679,7 @@ export function RundownEditor({
     setFocusCueId(optimisticCue.id)
     cueRenderKeyRef.current.set(optimisticCue.id, optimisticCue.id)
     try {
-      const result = await addHeading(rundown.id, maxPos)
+      const result = await actions.addHeading(maxPos)
       if (result.error) {
         toast.error(result.error)
         setCues((prev) => prev.filter((c) => c.id !== optimisticCue.id))
@@ -692,10 +698,10 @@ export function RundownEditor({
           label: 'Add heading',
           undo: async () => {
             setCues((prev) => prev.filter((c) => c.id !== realCue.id))
-            await deleteCue(realCue.id, rundown.id)
+            await actions.deleteCue(realCue.id)
           },
           redo: async () => {
-            await restoreCue(realCue.id, rundown.id)
+            await actions.restoreCue(realCue.id)
             await refreshCues()
           },
         })
@@ -713,19 +719,19 @@ export function RundownEditor({
           : c
       )
     )
-    convertCueToHeading(id, rundown.id).then((r) => {
+    actions.updateCue(id, { cue_type: 'heading', group_id: null, duration_ms: 0, start_type: 'soft', start_time_override: null }).then((r) => {
       if (r.error) { toast.error(r.error); refreshCues() }
     })
-  }, [rundown.id, refreshCues])
+  }, [actions, refreshCues])
 
   const handleConvertToCue = useCallback((id: string) => {
     setCues((prev) =>
       prev.map((c) => c.id === id ? { ...c, cue_type: 'cue' as const } : c)
     )
-    convertHeadingToCue(id, rundown.id).then((r) => {
+    actions.updateCue(id, { cue_type: 'cue' }).then((r) => {
       if (r.error) { toast.error(r.error); refreshCues() }
     })
-  }, [rundown.id, refreshCues])
+  }, [actions, refreshCues])
 
   const handleAddCueAt = useCallback(async (id: string, direction: 'above' | 'below') => {
     if (addingRef.current) return
@@ -737,7 +743,7 @@ export function RundownEditor({
     // Inherit the group_id so cues added inside a group stay inside it (#45)
     const groupId = targetCue.group_id ?? undefined
     try {
-      const r = await addCue(rundown.id, sorted.length, groupId)
+      const r = await actions.addCue(sorted.length, groupId)
       if (r.error || !r.cue) { toast.error(r.error ?? 'Failed to add cue'); return }
       const newCue = normalizeCue(r.cue)
       setFocusCueId(newCue.id)
@@ -749,7 +755,7 @@ export function RundownEditor({
         const c = cuesRef.current.find((x) => x.id === oid)
         return c ? { ...c, position: i } : null
       }).filter(Boolean) as typeof sorted)
-      await reorderCues(rundown.id, orderIds)
+      await actions.reorderCues(orderIds)
     } finally {
       addingRef.current = false
     }
@@ -790,14 +796,18 @@ export function RundownEditor({
         : { ...c, position: pm.get(c.id) ?? c.position }
       )
     })
-    const r = await removeFromGroup(cueId, rundown.id, withoutCue)
+    const [r1, r2] = await Promise.all([
+      actions.updateCue(cueId, { group_id: null }),
+      actions.reorderCues(withoutCue),
+    ])
+    const r = r1.error ? r1 : r2
     if (r.error) { toast.error(r.error); refreshCues() }
-  }, [layout, rundown.id, refreshCues])
+  }, [layout, actions, refreshCues])
 
   const handleDuplicateSingle = useCallback(async (id: string) => {
     setDuplicatingIds((prev) => new Set(prev).add(id))
     try {
-      const r = await duplicateCues(rundown.id, [id])
+      const r = await actions.duplicateCues([id])
       if (r.error) { toast.error(r.error); return }
       await refreshCues()
     } finally {
@@ -810,19 +820,19 @@ export function RundownEditor({
     const snap = cuesRef.current.find((c) => c.id === id)
     setCues((prev) => prev.filter((c) => c.id !== id))
     setSelectedIds((prev) => { const n = new Set(prev); n.delete(id); return n })
-    deleteCue(id, rundown.id).then((r) => {
+    actions.deleteCue(id).then((r) => {
       if (r.error) { toast.error(r.error); refreshCues() }
     })
     if (snap) {
       history.push({
         label: `Delete "${stripHtml(snap.title) || 'Untitled cue'}"`,
         undo: async () => {
-          await restoreCue(id, rundown.id)
+          await actions.restoreCue(id)
           await refreshCues()
         },
         redo: async () => {
           setCues((prev) => prev.filter((c) => c.id !== id))
-          await deleteCue(id, rundown.id)
+          await actions.deleteCue(id)
         },
       })
     }
@@ -851,7 +861,7 @@ export function RundownEditor({
     const scripts = [...cue.scripts, block]
     setFocusScriptId(block.id)
     setCues((prev) => prev.map((c) => (c.id === cueId ? { ...c, scripts } : c)))
-    trackSave(updateCue(cueId, rundown.id, { scripts }))
+    trackSave(actions.updateCue(cueId, { scripts }))
   }, [rundown.id, trackSave])
 
   const handleScriptsChange = useCallback((cueId: string, scripts: ScriptBlock[]) => {
@@ -864,7 +874,7 @@ export function RundownEditor({
       if (words > 0) updates.duration_ms = autoDurationMs(words)
     }
     setCues((prev) => prev.map((c) => (c.id === cueId ? { ...c, ...updates } : c)))
-    trackSave(updateCue(cueId, rundown.id, updates))
+    trackSave(actions.updateCue(cueId, updates))
   }, [rundown.id, trackSave])
 
   const handleDeleteScript = useCallback((cueId: string, scriptId: string) => {
@@ -877,7 +887,7 @@ export function RundownEditor({
       updates.duration_mode = 'manual'
     }
     setCues((prev) => prev.map((c) => (c.id === cueId ? { ...c, ...updates } : c)))
-    trackSave(updateCue(cueId, rundown.id, updates))
+    trackSave(actions.updateCue(cueId, updates))
   }, [rundown.id, trackSave])
 
   const handleToggleScriptCollapsed = useCallback((cueId: string, scriptId: string) => {
@@ -885,7 +895,7 @@ export function RundownEditor({
     if (!cue) return
     const scripts = cue.scripts.map((s) => (s.id === scriptId ? { ...s, collapsed: !s.collapsed } : s))
     setCues((prev) => prev.map((c) => (c.id === cueId ? { ...c, scripts } : c)))
-    updateCue(cueId, rundown.id, { scripts })
+    actions.updateCue(cueId, { scripts })
   }, [rundown.id])
 
   const handleSetDurationMode = useCallback((cueId: string, mode: 'manual' | 'auto') => {
@@ -897,7 +907,7 @@ export function RundownEditor({
       if (words > 0) updates.duration_ms = autoDurationMs(words)
     }
     setCues((prev) => prev.map((c) => (c.id === cueId ? { ...c, ...updates } : c)))
-    trackSave(updateCue(cueId, rundown.id, updates))
+    trackSave(actions.updateCue(cueId, updates))
   }, [rundown.id, trackSave])
 
   // Columns-dropdown bulk actions: expand/collapse every script block in the rundown at once.
@@ -911,7 +921,7 @@ export function RundownEditor({
       prev.map((c) => (nextScriptsByCue.has(c.id) ? { ...c, scripts: nextScriptsByCue.get(c.id)! } : c))
     )
     await Promise.all(
-      affected.map((c) => updateCue(c.id, rundown.id, { scripts: nextScriptsByCue.get(c.id)! }))
+      affected.map((c) => actions.updateCue(c.id, { scripts: nextScriptsByCue.get(c.id)! }))
     )
   }, [rundown.id])
 
@@ -924,17 +934,17 @@ export function RundownEditor({
     if (ids.length === 0) return
     setCues((prev) => prev.filter((c) => !selectedIds.has(c.id)))
     setSelectedIds(new Set())
-    const r = await deleteCues(rundown.id, ids)
+    const r = await actions.deleteCues(ids)
     if (r.error) { toast.error(r.error); refreshCues(); return }
     history.push({
       label: `Delete ${ids.length} cue${ids.length > 1 ? 's' : ''}`,
       undo: async () => {
-        await Promise.all(ids.map((id) => restoreCue(id, rundown.id)))
+        await Promise.all(ids.map((id) => actions.restoreCue(id)))
         await refreshCues()
       },
       redo: async () => {
         setCues((prev) => prev.filter((c) => !ids.includes(c.id)))
-        await deleteCues(rundown.id, ids)
+        await actions.deleteCues(ids)
       },
     })
   }, [selectedIds, rundown.id, refreshCues, history.push])
@@ -943,7 +953,7 @@ export function RundownEditor({
     const ids = [...selectedIds]
     if (ids.length === 0) return
     setCues((prev) => prev.map((c) => (selectedIds.has(c.id) ? { ...c, background_color: color } : c)))
-    const r = await trackSave(setCuesBackground(rundown.id, ids, color))
+    const r = await trackSave(actions.setCuesBackground(ids, color))
     if (r.error) toast.error(r.error)
   }, [selectedIds, rundown.id, trackSave])
 
@@ -952,7 +962,7 @@ export function RundownEditor({
     if (ids.length === 0) return
     setBatchDuplicating(true)
     try {
-      const r = await duplicateCues(rundown.id, ids)
+      const r = await actions.duplicateCues(ids)
       if (r.error) return toast.error(r.error)
       await refreshCues()
       setSelectedIds(new Set())
@@ -987,7 +997,7 @@ export function RundownEditor({
 
   const handleDeleteGroup = useCallback(async (headingId: string) => {
     setCues((prev) => prev.filter((c) => c.id !== headingId))
-    const r = await deleteCues(rundown.id, [headingId])
+    const r = await actions.deleteCues([headingId])
     if (r.error) { toast.error(r.error) }
     await refreshCues()
   }, [rundown.id, refreshCues])
@@ -1002,7 +1012,7 @@ export function RundownEditor({
     const newOrder = [...rest.slice(0, idx), ...sel, ...rest.slice(idx)]
     const pm = new Map(newOrder.map((id, i) => [id, i]))
     setCues((prev) => prev.map((c) => ({ ...c, position: pm.get(c.id) ?? c.position })))
-    const r = await reorderCues(rundown.id, newOrder)
+    const r = await actions.reorderCues(newOrder)
     if (r.error) { toast.error(r.error); refreshCues() }
   }, [layout, selectedIds, rundown.id, refreshCues])
 
@@ -1088,11 +1098,11 @@ export function RundownEditor({
       return { ...c, position: pm.get(c.id) ?? c.position }
     }))
 
-    const r = await trackSave(reorderCues(rundown.id, fullOrder))
+    const r = await trackSave(actions.reorderCues(fullOrder))
     if (r.error) { toast.error(r.error); setCues(snapshot); return }
 
     if (groupChanged && draggedCue) {
-      await updateCue(draggedCue.id, rundown.id, { group_id: newGroupId })
+      await actions.updateCue(draggedCue.id, { group_id: newGroupId })
     }
 
     history.push({
@@ -1103,16 +1113,16 @@ export function RundownEditor({
           if (c.id === active.id) return { ...c, position: pm2.get(c.id) ?? c.position, group_id: oldGroupId }
           return { ...c, position: pm2.get(c.id) ?? c.position }
         }))
-        await reorderCues(rundown.id, oldFullOrder)
-        if (groupChanged && draggedCue) await updateCue(draggedCue.id, rundown.id, { group_id: oldGroupId })
+        await actions.reorderCues(oldFullOrder)
+        if (groupChanged && draggedCue) await actions.updateCue(draggedCue.id, { group_id: oldGroupId })
       },
       redo: async () => {
         setCues((cs) => cs.map((c) => {
           if (c.id === active.id) return { ...c, position: pm.get(c.id) ?? c.position, group_id: newGroupId }
           return { ...c, position: pm.get(c.id) ?? c.position }
         }))
-        await reorderCues(rundown.id, fullOrder)
-        if (groupChanged && draggedCue) await updateCue(draggedCue.id, rundown.id, { group_id: newGroupId })
+        await actions.reorderCues(fullOrder)
+        if (groupChanged && draggedCue) await actions.updateCue(draggedCue.id, { group_id: newGroupId })
       },
     })
   }
@@ -1205,7 +1215,7 @@ export function RundownEditor({
 
   return (
     <RundownDataProvider
-      value={{ rundownId: rundown.id, mentions, variables, setMentions, setVariables, rundownSettings, onSaveSettings: handleSaveSettings, saveStatus, trackSave }}
+      value={{ rundownId: rundown.id, mentions, variables, setMentions, setVariables, rundownSettings, onSaveSettings: handleSaveSettings, saveStatus, trackSave, actions, collab }}
     >
       <div className="flex flex-col h-full bg-[#09090d] overflow-hidden">
         <RundownHeader
@@ -1213,9 +1223,11 @@ export function RundownEditor({
           columns={columns}
           onPlayClick={async () => {
             if (live.isLive) { live.end(); return }
-            // Reclaim show control in case a collaborator was driving —
-            // starting the show is always a deliberate owner override.
-            await takeShowControl(rundown.id)
+            if (!canRunShow) return
+            // Reclaim/take show control — starting the show is always a
+            // deliberate override of whoever was previously driving.
+            if (collab) await collabTakeControl(collab.token)
+            else await takeShowControl(rundown.id)
             leader.refresh()
             // Start from the earliest selected cue (in document order), else cue 1.
             const startId = liveCues.find((c) => selectedIds.has(c.id))?.id
@@ -1223,7 +1235,9 @@ export function RundownEditor({
             live.start(startId)
           }}
           isLive={live.isLive}
+          canRunShow={canRunShow}
           showLeaderLabel={!isShowLeader ? leader.leaderLabel : null}
+          collab={collab}
           onOpenSettings={(tab) => {
             setSettingsTab(tab ?? 'display')
             setSettingsOpen(true)
@@ -1283,6 +1297,7 @@ export function RundownEditor({
               <BatchToolbar
                 count={selectedIds.size}
                 canUngroup={canUngroup}
+                hideGroup={!!collab}
                 onSelectAll={handleSelectAll}
                 onDuplicate={handleDuplicate}
                 duplicating={batchDuplicating}
@@ -1376,7 +1391,7 @@ export function RundownEditor({
                             onToggleCollapse={() => toggleCollapse(item.heading.id)}
                             onSelect={handleSelect}
                             onUpdate={handleUpdateCue}
-                            onUngroup={handleUngroupOne}
+                            onUngroup={collab ? undefined : handleUngroupOne}
                             onDelete={handleDeleteGroup}
                             onConvertToCue={handleConvertToCue}
                             onAddAbove={(id) => handleAddCueAtHeading(id, 'above')}

@@ -1,6 +1,17 @@
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { CollabRundownView, type CollabData } from '@/components/share/CollabRundownView'
+import { RundownEditor } from '@/components/rundown/RundownEditor'
+import type { Rundown, Column, Cue, Cell, Mention, Variable } from '@/lib/supabase/types'
+
+interface CollabRpcPayload {
+  rundown: Rundown
+  collab: { label: string; editableColumns: string[]; canAddDeleteCues: boolean; canAddDeleteColumns: boolean; canRunShow: boolean }
+  columns: Column[]
+  cues: Cue[]
+  cells: Cell[]
+  variables: Variable[]
+  mentions: Mention[]
+}
 
 export default async function CollabPage({
   params,
@@ -28,5 +39,23 @@ export default async function CollabPage({
     )
   }
 
-  return <CollabRundownView data={data as unknown as CollabData} token={token} />
+  const payload = data as unknown as CollabRpcPayload
+
+  return (
+    <RundownEditor
+      rundown={payload.rundown}
+      initialCues={payload.cues}
+      initialColumns={payload.columns}
+      initialCells={payload.cells}
+      initialMentions={payload.mentions}
+      initialVariables={payload.variables}
+      initialPrivateNotes={{}}
+      collab={{
+        token,
+        label: payload.collab.label,
+        editableColumns: payload.collab.editableColumns,
+        canRunShow: payload.collab.canRunShow,
+      }}
+    />
+  )
 }

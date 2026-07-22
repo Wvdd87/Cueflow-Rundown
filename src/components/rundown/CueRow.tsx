@@ -21,7 +21,6 @@ import {
 } from 'lucide-react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { updateCue } from '@/app/actions/cues'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -158,7 +157,7 @@ export function CueRow({
   focusedColId = null,
   onCellFocus,
 }: CueRowProps) {
-  const { trackSave } = useRundownData()
+  const { trackSave, actions, collab } = useRundownData()
   const [editingDuration, setEditingDuration] = useState(false)
   const [durationInput, setDurationInput] = useState('')
   const [editingTitle, setEditingTitle] = useState(focusTitle)
@@ -211,36 +210,36 @@ export function CueRow({
     // Editing the duration directly always wins over the script-derived value.
     if (cue.duration_mode === 'auto') updates.duration_mode = 'manual'
     onUpdate(cue.id, updates)
-    await trackSave(updateCue(cue.id, rundownId, updates))
+    await trackSave(actions.updateCue(cue.id, updates))
   }
   function saveTitleHtml(html: string) {
     setEditingTitle(false)
     if (html === cue.title) return
     onUpdate(cue.id, { title: html })
-    trackSave(updateCue(cue.id, rundownId, { title: html }))
+    trackSave(actions.updateCue(cue.id, { title: html }))
   }
   function saveSubtitleHtml(html: string) {
     setEditingSubtitle(false)
     const value = !html || html === '<p></p>' ? null : html
     if (value === cue.subtitle) return
     onUpdate(cue.id, { subtitle: value })
-    trackSave(updateCue(cue.id, rundownId, { subtitle: value }))
+    trackSave(actions.updateCue(cue.id, { subtitle: value }))
   }
   function handleDelete() { onDelete(cue.id) }
   async function toggleStartType() {
     const newType = cue.start_type === 'soft' ? 'hard' : 'soft'
     const override = newType === 'hard' ? formatMsToTime(cue.calculated_start_ms) : null
     onUpdate(cue.id, { start_type: newType, start_time_override: override })
-    await trackSave(updateCue(cue.id, rundownId, { start_type: newType, start_time_override: override }))
+    await trackSave(actions.updateCue(cue.id, { start_type: newType, start_time_override: override }))
   }
   async function setColor(color: string | null) {
     onUpdate(cue.id, { background_color: color })
-    await trackSave(updateCue(cue.id, rundownId, { background_color: color }))
+    await trackSave(actions.updateCue(cue.id, { background_color: color }))
   }
   async function toggleNotFinal() {
     const value = !cue.not_final
     onUpdate(cue.id, { not_final: value })
-    await trackSave(updateCue(cue.id, rundownId, { not_final: value }))
+    await trackSave(actions.updateCue(cue.id, { not_final: value }))
   }
   function startStartEdit() {
     setStartInput(formatMsToTime(cue.calculated_start_ms))
@@ -253,7 +252,7 @@ export function CueRow({
     const override = formatMsToTime(ms)
     if (override === cue.start_time_override) return
     onUpdate(cue.id, { start_type: 'hard', start_time_override: override })
-    await trackSave(updateCue(cue.id, rundownId, { start_type: 'hard', start_time_override: override }))
+    await trackSave(actions.updateCue(cue.id, { start_type: 'hard', start_time_override: override }))
   }
 
   const startTimeLabel = formatMsToTimeDisplay(cue.calculated_start_ms, timeFormat)
@@ -726,12 +725,16 @@ export function CueRow({
                   data-col-id={PRIVATE_NOTES_ID}
                   style={{ ...tile(privateNotesWidth, { padding: '10px 2px' }), ...ringStyle(PRIVATE_NOTES_ID) }}
                 >
-                  <PrivateNoteCell
-                    cueId={cue.id}
-                    rundownId={rundownId}
-                    value={privateNote}
-                    onChange={onPrivateNoteChange}
-                  />
+                  {/* Private notes are per-authenticated-user — not available to
+                      collaboration links, which have no such identity. */}
+                  {!collab && (
+                    <PrivateNoteCell
+                      cueId={cue.id}
+                      rundownId={rundownId}
+                      value={privateNote}
+                      onChange={onPrivateNoteChange}
+                    />
+                  )}
                 </div>
               )
             }

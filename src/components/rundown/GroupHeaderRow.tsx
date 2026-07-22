@@ -47,7 +47,7 @@ interface GroupHeaderRowProps {
   onToggleCollapse: () => void
   onSelect: (id: string, mods: { shift: boolean; meta: boolean }) => void
   onUpdate: (id: string, updates: Partial<Cue>) => void
-  onUngroup: (id: string) => void
+  onUngroup?: (id: string) => void
   onDelete: (id: string) => void
   onConvertToCue?: (id: string) => void
   onAddAbove?: (id: string) => void
@@ -194,9 +194,11 @@ export function GroupHeaderRow({
               </div>
             )}
             {isGroup ? (
-              <DropdownMenuItem onClick={() => onUngroup(heading.id)} className={MI}>
-                <Ungroup className="w-3.5 h-3.5 text-[#9ba0ab]" /> Ungroup
-              </DropdownMenuItem>
+              onUngroup && (
+                <DropdownMenuItem onClick={() => onUngroup(heading.id)} className={MI}>
+                  <Ungroup className="w-3.5 h-3.5 text-[#9ba0ab]" /> Ungroup
+                </DropdownMenuItem>
+              )
             ) : (
               onConvertToCue && (
                 <DropdownMenuItem onClick={() => onConvertToCue(heading.id)} className={MI}>

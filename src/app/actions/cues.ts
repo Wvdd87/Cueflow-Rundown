@@ -100,7 +100,7 @@ export async function convertCueToHeading(id: string, rundownId: string) {
 export async function updateCue(
   id: string,
   rundownId: string,
-  updates: Partial<Pick<Cue, 'title' | 'subtitle' | 'cue_number' | 'duration_ms' | 'duration_mode' | 'scripts' | 'not_final' | 'start_type' | 'start_time_override' | 'auto_start' | 'background_color' | 'locked' | 'group_id'>>
+  updates: Partial<Pick<Cue, 'title' | 'subtitle' | 'cue_number' | 'cue_type' | 'duration_ms' | 'duration_mode' | 'scripts' | 'not_final' | 'start_type' | 'start_time_override' | 'auto_start' | 'background_color' | 'locked' | 'group_id'>>
 ) {
   const { supabase } = await getRundownAccess(rundownId)
 

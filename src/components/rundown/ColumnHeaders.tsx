@@ -35,14 +35,6 @@ import {
   useSortable,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import {
-  addColumn,
-  renameColumn,
-  deleteColumn,
-  updateColumnOptions,
-  updateColumnWidth,
-  reorderColumns,
-} from '@/app/actions/columns'
 import { useRundownData } from './RundownDataContext'
 import {
   DropdownMenu,
@@ -142,7 +134,7 @@ export function ColumnHeaders({
   onExpandAllScripts,
   onCollapseAllScripts,
 }: ColumnHeadersProps) {
-  const { trackSave } = useRundownData()
+  const { trackSave, actions, collab } = useRundownData()
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
 
@@ -169,7 +161,7 @@ export function ColumnHeaders({
     const maxPos = columns.reduce((m, c) => Math.max(m, c.position), -1)
     const { options, optionColors } =
       addType === 'dropdown' ? rowsToOptions(addRows) : { options: null, optionColors: null }
-    const result = await addColumn(rundownId, name, maxPos, addType, options, optionColors)
+    const result = await actions.addColumn(name, maxPos, addType, options, optionColors)
     setSaving(false)
     if (result.error) {
       toast.error(result.error)
@@ -185,14 +177,14 @@ export function ColumnHeaders({
   async function handleRename(id: string) {
     const name = renameValue.trim()
     if (!name) { setRenamingId(null); return }
-    const result = await renameColumn(id, name, rundownId)
+    const result = await actions.renameColumn(id, name)
     if (result.error) toast.error(result.error)
     else onColumnsChange(columns.map((c) => (c.id === id ? { ...c, name } : c)))
     setRenamingId(null)
   }
 
   async function handleDelete(id: string) {
-    const result = await deleteColumn(id, rundownId)
+    const result = await actions.deleteColumn(id)
     if (result.error) toast.error(result.error)
     else onColumnsChange(columns.filter((c) => c.id !== id))
   }
@@ -201,7 +193,7 @@ export function ColumnHeaders({
     if (!editCol) return
     const { options, optionColors } = rowsToOptions(editRows)
     setSaving(true)
-    const result = await updateColumnOptions(editCol.id, options, rundownId, optionColors)
+    const result = await actions.updateColumnOptions(editCol.id, options, optionColors)
     setSaving(false)
     if (result.error) {
       toast.error(result.error)
@@ -240,7 +232,7 @@ export function ColumnHeaders({
       document.removeEventListener('mousemove', onMove)
       document.removeEventListener('mouseup', onUp)
       const r = resizeRef.current
-      if (r) updateColumnWidth(r.id, r.width, rundownId)
+      if (r) actions.updateColumnWidth(r.id, r.width)
       resizeRef.current = null
     }
     document.addEventListener('mousemove', onMove)
@@ -311,7 +303,7 @@ export function ColumnHeaders({
         .filter((c): c is Column => !!c)
       const fullOrder = [...reorderedVisible, ...hidden].map((c, i) => ({ ...c, position: i }))
       onColumnsChange(fullOrder)
-      const result = await trackSave(reorderColumns(rundownId, fullOrder.map((c) => c.id)))
+      const result = await trackSave(actions.reorderColumns(fullOrder.map((c) => c.id)))
       if (result.error) toast.error(result.error)
     }
   }

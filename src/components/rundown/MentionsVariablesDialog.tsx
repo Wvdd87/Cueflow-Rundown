@@ -15,6 +15,14 @@ import {
   updateVariable,
   deleteVariable,
 } from '@/app/actions/variables'
+import {
+  collabAddMention,
+  collabUpdateMention,
+  collabDeleteMention,
+  collabAddVariable,
+  collabUpdateVariable,
+  collabDeleteVariable,
+} from '@/app/actions/collab'
 
 interface MentionsVariablesDialogProps {
   open: boolean
@@ -27,7 +35,7 @@ export function MentionsVariablesDialog({
   onOpenChange,
   initialTab = 'mentions',
 }: MentionsVariablesDialogProps) {
-  const { rundownId, mentions, variables, setMentions, setVariables } =
+  const { rundownId, mentions, variables, setMentions, setVariables, collab } =
     useRundownData()
   const [tab, setTab] = useState<'mentions' | 'variables'>(initialTab)
 
@@ -42,20 +50,37 @@ export function MentionsVariablesDialog({
           <DialogTitle>Mentions &amp; Variables</DialogTitle>
         </DialogHeader>
 
-        <MentionsVariablesPanel
-          mentions={mentions}
-          variables={variables}
-          setMentions={setMentions}
-          setVariables={setVariables}
-          tab={tab}
-          onTabChange={setTab}
-          addMention={(name, description) => addMention(rundownId, name, description)}
-          updateMention={(id, updates) => updateMention(id, rundownId, updates)}
-          deleteMention={(id) => deleteMention(id, rundownId)}
-          addVariable={(key, value) => addVariable(rundownId, key, value)}
-          updateVariable={(id, updates) => updateVariable(id, rundownId, updates)}
-          deleteVariable={(id) => deleteVariable(id, rundownId)}
-        />
+        {collab ? (
+          <MentionsVariablesPanel
+            mentions={mentions}
+            variables={variables}
+            setMentions={setMentions}
+            setVariables={setVariables}
+            tab={tab}
+            onTabChange={setTab}
+            addMention={(name, description) => collabAddMention(collab.token, name, description)}
+            updateMention={(id, updates) => collabUpdateMention(collab.token, id, updates)}
+            deleteMention={(id) => collabDeleteMention(collab.token, id)}
+            addVariable={(key, value) => collabAddVariable(collab.token, key, value)}
+            updateVariable={(id, updates) => collabUpdateVariable(collab.token, id, updates)}
+            deleteVariable={(id) => collabDeleteVariable(collab.token, id)}
+          />
+        ) : (
+          <MentionsVariablesPanel
+            mentions={mentions}
+            variables={variables}
+            setMentions={setMentions}
+            setVariables={setVariables}
+            tab={tab}
+            onTabChange={setTab}
+            addMention={(name, description) => addMention(rundownId, name, description)}
+            updateMention={(id, updates) => updateMention(id, rundownId, updates)}
+            deleteMention={(id) => deleteMention(id, rundownId)}
+            addVariable={(key, value) => addVariable(rundownId, key, value)}
+            updateVariable={(id, updates) => updateVariable(id, rundownId, updates)}
+            deleteVariable={(id) => deleteVariable(id, rundownId)}
+          />
+        )}
       </DialogContent>
     </Dialog>
   )

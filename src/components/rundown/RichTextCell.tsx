@@ -21,7 +21,6 @@ import {
   Highlighter,
   RemoveFormatting,
 } from 'lucide-react'
-import { upsertCell } from '@/app/actions/cues'
 import { resolveMentionsHtml } from '@/lib/cellHtml'
 import { useRundownData } from './RundownDataContext'
 import { buildMentionExtension } from './cellExtensions'
@@ -55,7 +54,8 @@ export function RichTextCell({
   initialContent,
   onContentChange,
 }: RichTextCellProps) {
-  const { mentions, variables, trackSave } = useRundownData()
+  const { mentions, variables, trackSave, actions, collab } = useRundownData()
+  const locked = !!collab && !collab.editableColumns.includes(columnId)
   const [editing, setEditing] = useState(false)
   const [content, setContent] = useState(initialContent)
 
@@ -78,12 +78,12 @@ export function RichTextCell({
       if (html === content) return
       setContent(html)
       onContentChange(cueId, columnId, html)
-      await trackSave(upsertCell(cueId, columnId, html, rundownId))
+      await trackSave(actions.upsertCell(cueId, columnId, html))
     },
-    [content, cueId, columnId, rundownId, onContentChange, trackSave]
+    [content, cueId, columnId, onContentChange, trackSave, actions]
   )
 
-  if (editing) {
+  if (editing && !locked) {
     return (
       <CellTipTap
         initialContent={content}
@@ -96,14 +96,18 @@ export function RichTextCell({
   }
 
   const isEmpty = !content || content === '<p></p>'
+  const startEditing = locked ? undefined : () => setEditing(true)
 
   if (isEmpty) {
     return (
       <div
         data-testid="richtext-cell"
-        data-cell-trigger
-        onClick={() => setEditing(true)}
-        className="tiptap-cell w-full min-h-[28px] px-2 py-1 text-sm text-[#c8c9d0] cursor-text hover:bg-[#1d1d24]/40 break-words"
+        data-cell-trigger={locked ? undefined : true}
+        onClick={startEditing}
+        className={cn(
+          'tiptap-cell w-full min-h-[28px] px-2 py-1 text-sm text-[#c8c9d0] break-words',
+          locked ? 'opacity-70' : 'cursor-text hover:bg-[#1d1d24]/40'
+        )}
       >
         <span className="text-[#5a5c66] italic">—</span>
       </div>
@@ -115,7 +119,8 @@ export function RichTextCell({
       html={content}
       variableMap={variableMap}
       mentionMap={mentionMap}
-      onClick={() => setEditing(true)}
+      onClick={startEditing}
+      locked={locked}
     />
   )
 }
@@ -146,11 +151,13 @@ function CellDisplay({
   variableMap,
   mentionMap,
   onClick,
+  locked,
 }: {
   html: string
   variableMap: Record<string, string>
   mentionMap: Record<string, Mention>
-  onClick: () => void
+  onClick?: () => void
+  locked?: boolean
 }) {
   const [hover, setHover] = useState<{ mention: Mention; x: number; y: number } | null>(
     null
@@ -193,7 +200,7 @@ function CellDisplay({
       setLightboxSrc(img.src)
       return
     }
-    onClick()
+    onClick?.()
   }
 
   return (
@@ -201,12 +208,15 @@ function CellDisplay({
       <div
         data-testid="richtext-cell"
         data-lightbox="1"
-        data-cell-trigger
+        data-cell-trigger={locked ? undefined : true}
         onClick={handleClick}
         onMouseOver={handleMouseMove}
         onMouseMove={handleMouseMove}
         onMouseLeave={() => setHover(null)}
-        className="tiptap-cell w-full min-h-[28px] px-2 py-1 text-sm text-[#c8c9d0] cursor-text hover:bg-[#1d1d24]/40 break-words"
+        className={cn(
+          'tiptap-cell w-full min-h-[28px] px-2 py-1 text-sm text-[#c8c9d0] break-words',
+          locked ? 'opacity-70' : 'cursor-text hover:bg-[#1d1d24]/40'
+        )}
         dangerouslySetInnerHTML={{ __html: resolvedHtml }}
       />
       {lightboxSrc && <ImageLightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />}

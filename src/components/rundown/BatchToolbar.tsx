@@ -34,6 +34,9 @@ interface BatchToolbarProps {
   onBackground: (color: string | null) => void
   onDelete: () => void
   onClear: () => void
+  /** Hides Group/Ungroup — creating or dissolving a heading isn't part of a
+   *  collaboration link's editing surface yet. */
+  hideGroup?: boolean
 }
 
 const ITEM =
@@ -51,6 +54,7 @@ export function BatchToolbar({
   onBackground,
   onDelete,
   onClear,
+  hideGroup,
 }: BatchToolbarProps) {
   const [movePos, setMovePos] = useState('')
   const [bgOpen, setBgOpen] = useState(false)
@@ -79,9 +83,12 @@ export function BatchToolbar({
         {duplicating ? <Loader2 className="w-[11px] h-[11px] animate-spin" /> : <Copy className="w-[11px] h-[11px]" />}
         {duplicating ? 'Duplicating…' : 'Duplicate'}
       </button>
+      {!hideGroup && (
       <button data-testid="batch-group" onClick={onGroup} className={ITEM}>
         <Group className="w-[11px] h-[11px]" /> Group
       </button>
+      )}
+      {!hideGroup && (
       <button
         data-testid="batch-ungroup"
         onClick={canUngroup ? onUngroup : undefined}
@@ -89,6 +96,7 @@ export function BatchToolbar({
       >
         <Ungroup className="w-[11px] h-[11px]" /> Ungroup
       </button>
+      )}
 
       {/* Move */}
       <DropdownMenu>

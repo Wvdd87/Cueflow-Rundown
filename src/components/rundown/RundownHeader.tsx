@@ -48,15 +48,21 @@ import {
   type RundownStatus,
 } from '@/lib/rundownStatus'
 import type { Rundown, Column, Cue } from '@/lib/supabase/types'
+import type { CollabContext } from './RundownDataContext'
 
 interface RundownHeaderProps {
   rundown: Rundown
   columns: Column[]
   onPlayClick: () => void
   isLive: boolean
+  canRunShow: boolean
   /** Set to another leader's label (e.g. a collaboration link) when they're
    *  currently driving the show instead of the owner. */
   showLeaderLabel?: string | null
+  /** Present when viewed via a collaboration link — hides project-management
+   *  controls (rename, Settings, Trash, Save as template, Share, Dashboard)
+   *  and points exports at the token-gated routes. */
+  collab?: CollabContext | null
   onOpenSettings: (tab?: 'display' | 'numbering') => void
   onOpenMentions: (tab?: 'mentions' | 'variables') => void
   onResetTiming: () => void
@@ -97,7 +103,9 @@ export function RundownHeader({
   columns,
   onPlayClick,
   isLive,
+  canRunShow,
   showLeaderLabel,
+  collab,
   onOpenSettings,
   onOpenMentions,
   onResetTiming,
@@ -168,7 +176,8 @@ export function RundownHeader({
         <Image src="/icon-512.png" alt="Back to dashboard" width={30} height={30} />
       </Link>
 
-      {/* Editable rundown name */}
+      {/* Editable rundown name — read-only for collaborators (renaming is
+          project management, kept with the owner) */}
       {editing ? (
         <input
           ref={inputRef}
@@ -181,6 +190,10 @@ export function RundownHeader({
           }}
           className="bg-transparent text-[#eef0f3] font-semibold text-base outline-none border-b border-[#f0a838] w-64 shrink-0"
         />
+      ) : collab ? (
+        <span className="text-[#eef0f3] font-semibold text-base tracking-[-0.01em] truncate max-w-md shrink-0">
+          {name}
+        </span>
       ) : (
         <button
           onClick={() => setEditing(true)}
@@ -247,6 +260,15 @@ export function RundownHeader({
 
       <SaveIndicator status={saveStatus} />
 
+      {collab && (
+        <span
+          data-testid="collab-label-badge"
+          className="font-cond text-[10px] font-bold uppercase tracking-[0.12em] text-[#f0a838] border border-[#f0a838]/40 bg-[rgba(240,168,56,0.08)] px-2 py-0.5 shrink-0"
+        >
+          {collab.label}
+        </span>
+      )}
+
       {/* Undo / Redo */}
       <div className="flex items-center">
         <button
@@ -275,8 +297,8 @@ export function RundownHeader({
         </button>
       </div>
 
-      {/* Run show / End show */}
-      {!isLive && showLeaderLabel && (
+      {/* Run show / End show — hidden entirely for a link without canRunShow */}
+      {canRunShow && !isLive && showLeaderLabel && (
         <span
           title="Clicking Run show will reclaim control from them"
           className="font-cond text-[10px] font-bold uppercase tracking-[0.1em] text-[#7c7e8a] shrink-0"
@@ -284,7 +306,7 @@ export function RundownHeader({
           {showLeaderLabel} is running the show
         </span>
       )}
-      {isLive ? (
+      {canRunShow && (isLive ? (
         <button
           onClick={onPlayClick}
           className="inline-flex items-center gap-2 h-9 px-4 font-cond text-[11px] font-bold uppercase tracking-[0.14em] bg-[rgba(255,40,72,0.12)] text-[#ff4663] border border-[#ff2848] hover:bg-[rgba(255,40,72,0.20)] cursor-pointer transition-colors"
@@ -300,7 +322,7 @@ export function RundownHeader({
           <Play className="w-[11px] h-[11px] fill-[#06060a]" />
           Run show
         </button>
-      )}
+      ))}
 
       {/* Rundown menu */}
       <DropdownMenu>
@@ -316,14 +338,18 @@ export function RundownHeader({
           <ChevronDown className="w-3 h-3 text-[#9ba0ab]" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="bg-[#111116] border-[#2e2e38] text-[#c8c9d0] w-60 p-0">
-          <DropdownMenuItem render={<Link href="/dashboard" />} className={MENU_ITEM}>
-            <LayoutDashboard className="w-3.5 h-3.5 text-[#9ba0ab]" /> Dashboard
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => onOpenSettings()} className={MENU_ITEM}>
-            <SettingsIcon className="w-3.5 h-3.5 text-[#9ba0ab]" /> Settings
-          </DropdownMenuItem>
+          {!collab && (
+            <>
+              <DropdownMenuItem render={<Link href="/dashboard" />} className={MENU_ITEM}>
+                <LayoutDashboard className="w-3.5 h-3.5 text-[#9ba0ab]" /> Dashboard
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onOpenSettings()} className={MENU_ITEM}>
+                <SettingsIcon className="w-3.5 h-3.5 text-[#9ba0ab]" /> Settings
+              </DropdownMenuItem>
 
-          <DropdownMenuSeparator className="bg-[#1d1d24]" />
+              <DropdownMenuSeparator className="bg-[#1d1d24]" />
+            </>
+          )}
 
           <DropdownMenuItem onClick={() => onOpenMentions('mentions')} className={MENU_ITEM}>
             <AtSign className="w-3.5 h-3.5 text-[#9ba0ab]" /> Mentions
@@ -331,26 +357,38 @@ export function RundownHeader({
           <DropdownMenuItem onClick={() => onOpenMentions('variables')} className={MENU_ITEM}>
             <DollarSign className="w-3.5 h-3.5 text-[#9ba0ab]" /> Text variables
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={onOpenTrash} data-testid="open-trash-menu-item" className={MENU_ITEM}>
-            <Trash2 className="w-3.5 h-3.5 text-[#9ba0ab]" /> Trash
-          </DropdownMenuItem>
+          {!collab && (
+            <DropdownMenuItem onClick={onOpenTrash} data-testid="open-trash-menu-item" className={MENU_ITEM}>
+              <Trash2 className="w-3.5 h-3.5 text-[#9ba0ab]" /> Trash
+            </DropdownMenuItem>
+          )}
 
           <DropdownMenuSeparator className="bg-[#1d1d24]" />
 
-          <DropdownMenuItem data-testid="save-as-template" onClick={handleSaveTemplate} className={MENU_ITEM}>
-            <LayoutTemplate className="w-3.5 h-3.5 text-[#9ba0ab]" /> Save as template
-          </DropdownMenuItem>
-          <DropdownMenuItem data-testid="share-menu-item" onClick={() => setShareOpen(true)} className={MENU_ITEM}>
-            <Share2 className="w-3.5 h-3.5 text-[#9ba0ab]" /> Share (read-only link)
-          </DropdownMenuItem>
+          {!collab && (
+            <>
+              <DropdownMenuItem data-testid="save-as-template" onClick={handleSaveTemplate} className={MENU_ITEM}>
+                <LayoutTemplate className="w-3.5 h-3.5 text-[#9ba0ab]" /> Save as template
+              </DropdownMenuItem>
+              <DropdownMenuItem data-testid="share-menu-item" onClick={() => setShareOpen(true)} className={MENU_ITEM}>
+                <Share2 className="w-3.5 h-3.5 text-[#9ba0ab]" /> Share (read-only link)
+              </DropdownMenuItem>
+            </>
+          )}
           <DropdownMenuItem
-            render={<a href={`/rundown/${rundown.id}/export/pdf`} target="_blank" rel="noopener noreferrer" />}
+            render={
+              <a
+                href={collab ? `/share/collab/${collab.token}/export/pdf` : `/rundown/${rundown.id}/export/pdf`}
+                target="_blank"
+                rel="noopener noreferrer"
+              />
+            }
             className={MENU_ITEM}
           >
             <FileDown className="w-3.5 h-3.5 text-[#9ba0ab]" /> Export PDF
           </DropdownMenuItem>
           <DropdownMenuItem
-            render={<a href={`/rundown/${rundown.id}/export/csv`} />}
+            render={<a href={collab ? `/share/collab/${collab.token}/export/csv` : `/rundown/${rundown.id}/export/csv`} />}
             className={MENU_ITEM}
           >
             <FileSpreadsheet className="w-3.5 h-3.5 text-[#9ba0ab]" /> Export CSV
@@ -366,12 +404,14 @@ export function RundownHeader({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <ShareDialog
-        rundownId={rundown.id}
-        columns={columns}
-        open={shareOpen}
-        onOpenChange={setShareOpen}
-      />
+      {!collab && (
+        <ShareDialog
+          rundownId={rundown.id}
+          columns={columns}
+          open={shareOpen}
+          onOpenChange={setShareOpen}
+        />
+      )}
     </div>
 
     {hasActiveFilters(filters) && (
