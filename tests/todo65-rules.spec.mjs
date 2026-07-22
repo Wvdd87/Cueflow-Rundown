@@ -48,13 +48,11 @@ async function openRules() {
 // intercepting clicks. Press Escape repeatedly until the rundown menu is
 // actually clickable again.
 async function closeAnyDialogs() {
-  for (let attempt = 0; attempt < 4; attempt++) {
+  for (let attempt = 0; attempt < 6; attempt++) {
     await page.keyboard.press('Escape')
     await page.waitForTimeout(300)
-    if (await page.locator('[data-testid="rundown-menu"]').isEnabled({ timeout: 500 }).catch(() => false)) {
-      const clickable = await page.locator('[data-testid="rundown-menu"]').click({ trial: true, timeout: 500 }).then(() => true).catch(() => false)
-      if (clickable) return
-    }
+    const clickable = await page.locator('[data-testid="rundown-menu"]').click({ trial: true, timeout: 500 }).then(() => true).catch(() => false)
+    if (clickable) return
   }
 }
 
@@ -137,7 +135,7 @@ try {
   await page.locator('[data-testid="save-rule-btn"]').click()
   await page.waitForTimeout(500)
   assert(await page.locator('[data-testid="rule-row"]').first().isVisible(), 'Rule appears in the list')
-  await page.keyboard.press('Escape')
+  await closeAnyDialogs()
   await page.waitForTimeout(200)
 
   // Reactive evaluation: cue 1 (matching) gets colored + badged, cue 2
@@ -165,6 +163,10 @@ try {
   await cue1.locator('[data-testid="cue-settings-btn"]').click()
   await page.waitForTimeout(200)
   await page.locator('button[style*="background: rgb(30, 58, 138)"]').first().click() // blue swatch
+  // The swatch is a plain button inside the dropdown, not a menu item, so
+  // selecting it doesn't auto-close the menu — close it explicitly or its
+  // portal/backdrop is still there to intercept the next section's clicks.
+  await closeAnyDialogs()
   await page.waitForTimeout(700)
   const manualBg = await cue1.locator('[data-col-id="title"]').evaluate((el) => getComputedStyle(el).backgroundColor)
   assert(manualBg === 'rgb(30, 58, 138)', 'Manual blue color wins over the (non-overriding) rule')

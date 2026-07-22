@@ -24,7 +24,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { DIALOG_CONTENT, DIALOG_HEADER, BTN_PRIMARY, ROW_TILE } from './dialogStyles'
-import { RuleBuilderModal } from './RuleBuilderModal'
+import { RuleForm } from './RuleBuilderModal'
 import { cn } from '@/lib/utils'
 import type { Column, RundownRule } from '@/lib/supabase/types'
 
@@ -87,15 +87,30 @@ export function RulesPanel({ open, onClose, rules, onChange, columns, groups }: 
   }
 
   return (
-    <>
-      <Dialog open={open && !builderOpen} onOpenChange={(o) => !o && onClose()}>
-        <DialogContent className={cn(DIALOG_CONTENT, 'sm:max-w-lg max-h-[85vh] overflow-y-auto')}>
-          <DialogHeader className={DIALOG_HEADER}>
-            <DialogTitle className="flex items-center gap-2 text-base font-semibold text-[#eef0f3]">
-              <Sparkles className="w-4 h-4 text-[#f0a838]" /> Rules
-            </DialogTitle>
-          </DialogHeader>
+    // A single Dialog whose content swaps between the list and the rule
+    // form — two independently-mounted Dialogs (list + builder) toggling in
+    // the same tick raced Base UI's inert-marker cleanup and left the page
+    // permanently unclickable, so the builder is inlined as plain content
+    // instead of owning its own Dialog.
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className={cn(DIALOG_CONTENT, 'sm:max-w-lg max-h-[85vh] overflow-y-auto')}>
+        <DialogHeader className={DIALOG_HEADER}>
+          <DialogTitle className="flex items-center gap-2 text-base font-semibold text-[#eef0f3]">
+            <Sparkles className="w-4 h-4 text-[#f0a838]" />
+            {builderOpen ? (editingRule ? 'Edit rule' : 'Add rule') : 'Rules'}
+          </DialogTitle>
+        </DialogHeader>
 
+        {builderOpen ? (
+          <RuleForm
+            key={editingRule?.id ?? 'new'}
+            onClose={() => setBuilderOpen(false)}
+            onSave={handleSaveRule}
+            columns={columns}
+            groups={groups}
+            initialRule={editingRule}
+          />
+        ) : (
           <div className="p-5 space-y-3">
             {rules.length === 0 ? (
               <p className="text-sm text-[#7c7e8a]">
@@ -123,20 +138,9 @@ export function RulesPanel({ open, onClose, rules, onChange, columns, groups }: 
               <Plus className="w-3.5 h-3.5" /> Add rule
             </button>
           </div>
-        </DialogContent>
-      </Dialog>
-
-      {builderOpen && (
-        <RuleBuilderModal
-          open={builderOpen}
-          onClose={() => setBuilderOpen(false)}
-          onSave={handleSaveRule}
-          columns={columns}
-          groups={groups}
-          initialRule={editingRule}
-        />
-      )}
-    </>
+        )}
+      </DialogContent>
+    </Dialog>
   )
 }
 

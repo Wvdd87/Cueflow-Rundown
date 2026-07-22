@@ -2,13 +2,7 @@
 
 import { useState } from 'react'
 import { Plus, X } from 'lucide-react'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import { DIALOG_CONTENT, DIALOG_HEADER, FIELD, FIELD_LABEL, BTN_PRIMARY, BTN_SECONDARY } from './dialogStyles'
+import { FIELD, FIELD_LABEL, BTN_PRIMARY, BTN_SECONDARY } from './dialogStyles'
 import { CUE_COLORS } from './layout'
 import {
   operatorsFor,
@@ -21,8 +15,7 @@ import {
 import { cn } from '@/lib/utils'
 import type { Column, RuleCondition, RundownRule } from '@/lib/supabase/types'
 
-interface RuleBuilderModalProps {
-  open: boolean
+interface RuleFormProps {
   onClose: () => void
   onSave: (rule: RundownRule) => void
   columns: Column[]
@@ -44,7 +37,11 @@ const TOGGLE = (on: boolean) =>
       : 'border-[#2e2e38] bg-[#16161c] text-[#9ba0ab] hover:border-[#3a3a48]'
   )
 
-export function RuleBuilderModal({ open, onClose, onSave, columns, groups, initialRule }: RuleBuilderModalProps) {
+/** The rule create/edit form — no Dialog wrapper of its own. Rendered inside
+ *  RulesPanel's single Dialog so the list/builder views never involve two
+ *  independently-mounted Dialog instances (that raced Base UI's inert-marker
+ *  cleanup and left the page unclickable — see RulesPanel.tsx). */
+export function RuleForm({ onClose, onSave, columns, groups, initialRule }: RuleFormProps) {
   const [label, setLabel] = useState(initialRule?.label ?? '')
   const [conditionLogic, setConditionLogic] = useState<'AND' | 'OR'>(initialRule?.conditionLogic ?? 'AND')
   const [conditions, setConditions] = useState<RuleCondition[]>(
@@ -95,14 +92,7 @@ export function RuleBuilderModal({ open, onClose, onSave, columns, groups, initi
   const canSave = label.trim() !== '' && conditions.length > 0 && (bgEnabled || textEnabled || badgeEnabled)
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className={cn(DIALOG_CONTENT, 'sm:max-w-lg max-h-[85vh] overflow-y-auto')}>
-        <DialogHeader className={DIALOG_HEADER}>
-          <DialogTitle className="text-base font-semibold text-[#eef0f3]">
-            {initialRule ? 'Edit rule' : 'Add rule'}
-          </DialogTitle>
-        </DialogHeader>
-
+    <>
         <div className="p-5 space-y-5">
           <div>
             <p className={FIELD_LABEL}>Rule name</p>
@@ -251,8 +241,7 @@ export function RuleBuilderModal({ open, onClose, onSave, columns, groups, initi
             </button>
           </div>
         </div>
-      </DialogContent>
-    </Dialog>
+    </>
   )
 }
 
