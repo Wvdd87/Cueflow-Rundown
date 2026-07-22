@@ -26,6 +26,7 @@ import { resolveMentionsHtml } from '@/lib/cellHtml'
 import { useRundownData } from './RundownDataContext'
 import { buildMentionExtension } from './cellExtensions'
 import { FileAttachment } from './fileAttachment'
+import { ImageLightbox } from './ImageLightbox'
 import { uploadCellFile, isImageFile } from '@/lib/upload'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -153,6 +154,7 @@ function CellDisplay({
   const [hover, setHover] = useState<{ mention: Mention; x: number; y: number } | null>(
     null
   )
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null)
 
   const resolvedHtml = useMemo(() => {
     const nameById = Object.fromEntries(
@@ -180,17 +182,32 @@ function CellDisplay({
     return () => window.removeEventListener('scroll', clear, true)
   }, [hover])
 
+  // Clicking an inline image opens it fullscreen instead of starting cell editing —
+  // works identically whether the show is live or not, since this is display-only.
+  function handleClick(e: React.MouseEvent) {
+    const img = (e.target as HTMLElement).closest?.('img')
+    if (img instanceof HTMLImageElement) {
+      e.preventDefault()
+      e.stopPropagation()
+      setLightboxSrc(img.src)
+      return
+    }
+    onClick()
+  }
+
   return (
     <>
       <div
         data-testid="richtext-cell"
-        onClick={onClick}
+        data-lightbox="1"
+        onClick={handleClick}
         onMouseOver={handleMouseMove}
         onMouseMove={handleMouseMove}
         onMouseLeave={() => setHover(null)}
         className="tiptap-cell w-full min-h-[28px] px-2 py-1 text-sm text-[#c8c9d0] cursor-text hover:bg-[#1d1d24]/40 break-words"
         dangerouslySetInnerHTML={{ __html: resolvedHtml }}
       />
+      {lightboxSrc && <ImageLightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />}
       {hover &&
         typeof document !== 'undefined' &&
         createPortal(

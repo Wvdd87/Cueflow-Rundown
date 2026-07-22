@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
-import type { Cue, Cell } from '@/lib/supabase/types'
+import type { Cue, Cell, CellAttachment } from '@/lib/supabase/types'
 
 async function getRundownAccess(rundownId: string) {
   const supabase = await createClient()
@@ -276,14 +276,15 @@ export async function duplicateCues(rundownId: string, ids: string[]) {
   // Copy cells
   const { data: cellData } = await supabase
     .from('cells')
-    .select('cue_id, column_id, content')
+    .select('cue_id, column_id, content, attachments')
     .in('cue_id', ids)
-  const cells = (cellData ?? []) as Pick<Cell, 'cue_id' | 'column_id' | 'content'>[]
+  const cells = (cellData ?? []) as Pick<Cell, 'cue_id' | 'column_id' | 'content' | 'attachments'>[]
   if (cells.length > 0) {
     const cellInserts = cells.map((cell) => ({
       cue_id: idMap.get(cell.cue_id)!,
       column_id: cell.column_id,
       content: cell.content,
+      attachments: cell.attachments,
     }))
     await supabase.from('cells').insert(cellInserts as never)
   }
@@ -417,15 +418,22 @@ export async function upsertCell(
   cueId: string,
   columnId: string,
   content: string,
-  rundownId: string
+  rundownId: string,
+  attachments?: CellAttachment[]
 ) {
   const { supabase } = await getRundownAccess(rundownId)
 
   const { error } = await supabase
     .from('cells')
-    .upsert({ cue_id: cueId, column_id: columnId, content } as never, {
-      onConflict: 'cue_id,column_id',
-    })
+    .upsert(
+      {
+        cue_id: cueId,
+        column_id: columnId,
+        content,
+        ...(attachments !== undefined ? { attachments } : {}),
+      } as never,
+      { onConflict: 'cue_id,column_id' }
+    )
 
   if (error) return { error: error.message }
   return { success: true }

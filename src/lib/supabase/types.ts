@@ -13,6 +13,13 @@ export interface ScriptBlock {
   collapsed: boolean
 }
 
+/** An uploaded file/image attached to a cell, independent of its content (stored in cells.attachments). */
+export interface CellAttachment {
+  url: string
+  name: string
+  type: string
+}
+
 export type Database = {
   public: {
     Tables: {
@@ -259,6 +266,7 @@ export type Database = {
           cue_id: string
           column_id: string
           content: string | null
+          attachments: CellAttachment[]
           created_at: string
           updated_at: string
         }
@@ -267,11 +275,13 @@ export type Database = {
           cue_id: string
           column_id: string
           content?: string | null
+          attachments?: CellAttachment[]
           created_at?: string
           updated_at?: string
         }
         Update: {
           content?: string | null
+          attachments?: CellAttachment[]
           updated_at?: string
         }
       }

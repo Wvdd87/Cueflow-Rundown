@@ -298,6 +298,10 @@ select option {
   outline: 2px solid #3b82f6;
   outline-offset: 1px;
 }
+/* Display-mode cells (not currently being edited) hint that images enlarge on click */
+.tiptap-cell[data-lightbox] img {
+  cursor: zoom-in;
+}
 
 /* File attachment chips */
 .tiptap-cell .file-attachment {

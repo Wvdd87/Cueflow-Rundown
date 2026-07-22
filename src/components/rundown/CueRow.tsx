@@ -42,7 +42,7 @@ import {
 import { formatDuration, parseDurationInput, formatMsToTime, formatMsToTimeDisplay, parseClockInput } from '@/lib/timing'
 import { scriptsWordCount, autoDurationMs } from '@/lib/scripts'
 import { cn, inlineHtml } from '@/lib/utils'
-import type { Cue, Column, ScriptBlock } from '@/lib/supabase/types'
+import type { Cue, Column, ScriptBlock, CellAttachment } from '@/lib/supabase/types'
 import type { CueTimingOutput, TimeDisplay } from '@/lib/timing'
 
 type SelectMods = { shift: boolean; meta: boolean }
@@ -54,6 +54,7 @@ interface CueRowProps {
   rowWidth: number
   columns: Column[]
   cells: Record<string, string>
+  cellAttachments: Record<string, CellAttachment[]>
   rundownId: string
   selected: boolean
   onSelect: (id: string, mods: SelectMods) => void
@@ -65,6 +66,7 @@ interface CueRowProps {
   onDuplicate: (id: string) => void
   onRemoveFromGroup?: (id: string) => void
   onCellChange: (cueId: string, columnId: string, content: string) => void
+  onCellAttachmentsChange: (cueId: string, columnId: string, attachments: CellAttachment[]) => void
   onAddScript: (id: string) => void
   onScriptsChange: (id: string, scripts: ScriptBlock[]) => void
   onDeleteScript: (id: string, scriptId: string) => void
@@ -104,6 +106,7 @@ export function CueRow({
   rowWidth,
   columns,
   cells,
+  cellAttachments,
   rundownId,
   selected,
   onSelect,
@@ -115,6 +118,7 @@ export function CueRow({
   onDuplicate,
   onRemoveFromGroup,
   onCellChange,
+  onCellAttachmentsChange,
   onAddScript,
   onScriptsChange,
   onDeleteScript,
@@ -568,7 +572,9 @@ export function CueRow({
                   options={col.options ?? []}
                   optionColors={col.option_colors}
                   value={cells[`${cue.id}:${col.id}`] ?? ''}
+                  attachments={cellAttachments[`${cue.id}:${col.id}`] ?? []}
                   onContentChange={onCellChange}
+                  onAttachmentsChange={onCellAttachmentsChange}
                 />
               ) : (
                 <RichTextCell
@@ -673,7 +679,9 @@ export function CueRow({
                     options={col.options ?? []}
                     optionColors={col.option_colors}
                     value={cells[`${cue.id}:${col.id}`] ?? ''}
+                    attachments={cellAttachments[`${cue.id}:${col.id}`] ?? []}
                     onContentChange={onCellChange}
+                    onAttachmentsChange={onCellAttachmentsChange}
                   />
                 ) : (
                   <RichTextCell

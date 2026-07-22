@@ -72,6 +72,7 @@ import type {
   Mention,
   Variable,
   ScriptBlock,
+  CellAttachment,
 } from '@/lib/supabase/types'
 
 interface RundownEditorProps {
@@ -104,6 +105,12 @@ function cellsToMap(cells: Cell[]): Record<string, string> {
   )
 }
 
+function cellAttachmentsToMap(cells: Cell[]): Record<string, CellAttachment[]> {
+  return Object.fromEntries(
+    cells.map((c) => [`${c.cue_id}:${c.column_id}`, c.attachments ?? []])
+  )
+}
+
 // Backfills scripts/duration_mode for cues read before the #54 migration
 // (supabase/schema_phase17.sql) has been applied, so a stale DB can't crash the editor.
 function normalizeCue(c: Cue): Cue {
@@ -123,6 +130,9 @@ export function RundownEditor({
   const [columns, setColumns] = useState<Column[]>(initialColumns)
   const [cells, setCells] = useState<Record<string, string>>(() =>
     cellsToMap(initialCells)
+  )
+  const [cellAttachments, setCellAttachments] = useState<Record<string, CellAttachment[]>>(() =>
+    cellAttachmentsToMap(initialCells)
   )
   const [mentions, setMentions] = useState<Mention[]>(initialMentions)
   const [variables, setVariables] = useState<Variable[]>(initialVariables)
@@ -459,6 +469,7 @@ export function RundownEditor({
     const r = await getRundownCues(rundown.id)
     setCues(r.cues.map(normalizeCue))
     setCells(cellsToMap(r.cells))
+    setCellAttachments(cellAttachmentsToMap(r.cells))
   }, [rundown.id])
 
   // --- Add cue ---
@@ -693,6 +704,12 @@ export function RundownEditor({
   const handleCellChange = useCallback((cueId: string, columnId: string, content: string) => {
     setCells((prev) => ({ ...prev, [`${cueId}:${columnId}`]: content }))
   }, [])
+  const handleCellAttachmentsChange = useCallback(
+    (cueId: string, columnId: string, attachments: CellAttachment[]) => {
+      setCellAttachments((prev) => ({ ...prev, [`${cueId}:${columnId}`]: attachments }))
+    },
+    []
+  )
   const handlePrivateNoteChange = useCallback((cueId: string, content: string) => {
     setPrivateNotes((prev) => ({ ...prev, [cueId]: content }))
   }, [])
@@ -983,6 +1000,7 @@ export function RundownEditor({
         rowWidth={rowWidth}
         columns={visibleColumns}
         cells={cells}
+        cellAttachments={cellAttachments}
         rundownId={rundown.id}
         selected={selectedIds.has(cue.id)}
         onSelect={handleSelect}
@@ -994,6 +1012,7 @@ export function RundownEditor({
         onDuplicate={handleDuplicateSingle}
         onRemoveFromGroup={handleRemoveFromGroup}
         onCellChange={handleCellChange}
+        onCellAttachmentsChange={handleCellAttachmentsChange}
         onAddScript={handleAddScript}
         onScriptsChange={handleScriptsChange}
         onDeleteScript={handleDeleteScript}
