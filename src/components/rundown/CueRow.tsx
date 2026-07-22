@@ -15,6 +15,8 @@ import {
   GripVertical,
   Ungroup,
   ScrollText,
+  TriangleAlert,
+  CheckCircle2,
 } from 'lucide-react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -225,6 +227,11 @@ export function CueRow({
     onUpdate(cue.id, { background_color: color })
     await updateCue(cue.id, rundownId, { background_color: color })
   }
+  async function toggleNotFinal() {
+    const value = !cue.not_final
+    onUpdate(cue.id, { not_final: value })
+    await updateCue(cue.id, rundownId, { not_final: value })
+  }
   function startStartEdit() {
     setStartInput(formatMsToTime(cue.calculated_start_ms))
     setEditingStart(true)
@@ -359,6 +366,11 @@ export function CueRow({
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => onAddScript(cue.id)} data-testid="add-script-menu-item" className={MI}>
                 <ScrollText className="w-3.5 h-3.5 text-[#9ba0ab]" /> Add script
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={toggleNotFinal} data-testid="toggle-not-final-menu-item" className={MI}>
+                {cue.not_final
+                  ? <><CheckCircle2 className="w-3.5 h-3.5 text-[#9ba0ab]" /> Mark as final</>
+                  : <><TriangleAlert className="w-3.5 h-3.5 text-[#f0a838]" /> Mark as not final yet</>}
               </DropdownMenuItem>
 
               {/* Background swatches */}
@@ -591,6 +603,16 @@ export function CueRow({
 
         {/* Title + subtitle */}
         <div className="group/title shrink-0 flex flex-col" style={{ width: titleWidth, minHeight: CF.minRowH, background: baseCellBg, padding: '12px 16px' }}>
+          {cue.not_final && (
+            <span
+              data-testid="not-final-badge"
+              title="Marked as not final yet"
+              className="inline-flex items-center gap-1 self-start mb-1 px-1.5 py-[1px] font-cond text-[9px] font-bold uppercase tracking-[0.12em]"
+              style={{ color: '#f0a838', border: '1px solid rgba(240,168,56,0.5)', background: 'rgba(240,168,56,0.1)' }}
+            >
+              <TriangleAlert className="w-2.5 h-2.5" /> Not final
+            </span>
+          )}
           {editingTitle ? (
             <InlineTipTap
               initialContent={cue.title}

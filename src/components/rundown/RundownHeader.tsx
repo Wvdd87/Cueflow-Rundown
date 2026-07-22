@@ -23,7 +23,6 @@ import {
 } from 'lucide-react'
 import {
   renameRundown,
-  updateRundownStatus,
   saveAsTemplate,
 } from '@/app/actions/rundowns'
 import { ShareDialog } from './ShareDialog'
@@ -40,7 +39,6 @@ import { toast } from 'sonner'
 import {
   STATUS_CONFIG,
   RUNDOWN_STATUSES,
-  normalizeStatus,
   type RundownStatus,
 } from '@/lib/rundownStatus'
 import type { Rundown, Column } from '@/lib/supabase/types'
@@ -62,6 +60,8 @@ interface RundownHeaderProps {
   onRedo: () => void
   searchCues: SearchCue[]
   onSearchSelect: (id: string) => void
+  status: RundownStatus
+  onChangeStatus: (next: RundownStatus) => void
 }
 
 const STATUS_DESC: Record<RundownStatus, string> = {
@@ -93,12 +93,11 @@ export function RundownHeader({
   onRedo,
   searchCues,
   onSearchSelect,
+  status,
+  onChangeStatus,
 }: RundownHeaderProps) {
   const [name, setName] = useState(rundown.name)
   const [editing, setEditing] = useState(false)
-  const [status, setStatus] = useState<RundownStatus>(
-    normalizeStatus(rundown.status)
-  )
   const [statusOpen, setStatusOpen] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -120,11 +119,9 @@ export function RundownHeader({
     }
   }
 
-  async function changeStatus(next: RundownStatus) {
-    setStatus(next)
+  function changeStatus(next: RundownStatus) {
     setStatusOpen(false)
-    const result = await updateRundownStatus(rundown.id, next)
-    if (result?.error) toast.error(result.error)
+    onChangeStatus(next)
   }
 
   async function handleSaveTemplate() {

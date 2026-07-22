@@ -214,6 +214,7 @@ export type Database = {
           duration_ms: number
           duration_mode: 'manual' | 'auto'
           scripts: ScriptBlock[]
+          not_final: boolean
           background_color: string | null
           locked: boolean
           created_at: string
@@ -235,6 +236,7 @@ export type Database = {
           duration_ms?: number
           duration_mode?: 'manual' | 'auto'
           scripts?: ScriptBlock[]
+          not_final?: boolean
           background_color?: string | null
           locked?: boolean
           created_at?: string
@@ -254,6 +256,7 @@ export type Database = {
           duration_ms?: number
           duration_mode?: 'manual' | 'auto'
           scripts?: ScriptBlock[]
+          not_final?: boolean
           background_color?: string | null
           locked?: boolean
           updated_at?: string

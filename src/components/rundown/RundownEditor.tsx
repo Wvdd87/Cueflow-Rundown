@@ -36,6 +36,8 @@ import {
   removeFromGroup,
   getRundownCues,
 } from '@/app/actions/cues'
+import { updateRundownStatus } from '@/app/actions/rundowns'
+import { normalizeStatus, type RundownStatus } from '@/lib/rundownStatus'
 import { useUndoHistory } from './useUndoHistory'
 import { RundownHeader } from './RundownHeader'
 import { ColumnHeaders } from './ColumnHeaders'
@@ -48,6 +50,9 @@ import { MentionsVariablesDialog } from './MentionsVariablesDialog'
 import { RundownTrashDialog } from './RundownTrashDialog'
 import { RundownSearch } from './RundownSearch'
 import type { SearchCue } from './RundownSearch'
+import { CueFilterBar } from './CueFilterBar'
+import { FinalizeWarningDialog, type NotFinalCueRef } from './FinalizeWarningDialog'
+import { emptyFilters, hasActiveFilters, computeCueVisibility, type CueFilterState } from './cueFilters'
 import { RundownDataProvider } from './RundownDataContext'
 import type { RundownSettings } from './RundownDataContext'
 import { buildCueLayout, formatCueNumber } from './cueTree'
@@ -111,10 +116,15 @@ function cellAttachmentsToMap(cells: Cell[]): Record<string, CellAttachment[]> {
   )
 }
 
-// Backfills scripts/duration_mode for cues read before the #54 migration
-// (supabase/schema_phase17.sql) has been applied, so a stale DB can't crash the editor.
+// Backfills scripts/duration_mode/not_final for cues read before the #54/#59
+// migrations have been applied, so a stale DB can't crash the editor.
 function normalizeCue(c: Cue): Cue {
-  return { ...c, scripts: c.scripts ?? [], duration_mode: c.duration_mode ?? 'manual' }
+  return {
+    ...c,
+    scripts: c.scripts ?? [],
+    duration_mode: c.duration_mode ?? 'manual',
+    not_final: c.not_final ?? false,
+  }
 }
 
 export function RundownEditor({
@@ -154,6 +164,9 @@ export function RundownEditor({
   const [mentionsOpen, setMentionsOpen] = useState(false)
   const [mentionsTab, setMentionsTab] = useState<'mentions' | 'variables'>('mentions')
   const [trashOpen, setTrashOpen] = useState(false)
+  const [rundownStatus, setRundownStatus] = useState<RundownStatus>(normalizeStatus(rundown.status))
+  const [finalizeWarningOpen, setFinalizeWarningOpen] = useState(false)
+  const [filters, setFilters] = useState<CueFilterState>(() => emptyFilters())
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   // Per-user view state below starts at deterministic defaults so the first
   // client render matches the server, then hydrates from localStorage after
@@ -312,6 +325,51 @@ export function RundownEditor({
     }))
   , [layout, rundownSettings])
 
+  const notFinalCues = useMemo<NotFinalCueRef[]>(() =>
+    layout.docOrder
+      .filter((c) => c.cue_type !== 'heading' && c.not_final)
+      .map((c) => ({
+        id: c.id,
+        displayNumber: formatCueNumber(
+          layout.numberOf[c.id] ?? '',
+          rundownSettings.cue_number_prefix,
+          rundownSettings.cue_number_start,
+          rundownSettings.cue_number_digits
+        ),
+        title: stripHtml(c.title ?? ''),
+      }))
+  , [layout, rundownSettings])
+
+  const commitStatusChange = useCallback(async (next: RundownStatus) => {
+    setRundownStatus(next)
+    const result = await updateRundownStatus(rundown.id, next)
+    if (result?.error) toast.error(result.error)
+  }, [rundown.id])
+
+  const handleChangeStatus = useCallback((next: RundownStatus) => {
+    if (next === 'finalized' && notFinalCues.length > 0) {
+      setFinalizeWarningOpen(true)
+      return
+    }
+    commitStatusChange(next)
+  }, [notFinalCues, commitStatusChange])
+
+  // Scrolling to a not-final cue from the finalize-warning dialog must first
+  // reveal it — expand its group and drop any active filter that would hide it.
+  const handleScrollToNotFinalCue = useCallback((id: string) => {
+    const cue = cuesRef.current.find((c) => c.id === id)
+    if (cue?.group_id) {
+      setCollapsedGroups((prev) => {
+        if (!prev.has(cue.group_id!)) return prev
+        const next = new Set(prev)
+        next.delete(cue.group_id!)
+        return next
+      })
+    }
+    setFilters((prev) => (hasActiveFilters(prev) ? emptyFilters() : prev))
+    setTimeout(() => handleSearchSelect(id), 50)
+  }, [handleSearchSelect])
+
   const timedCues = useMemo(() => calculateTimings(layout.docOrder), [layout])
   const timedMap = useMemo(
     () => Object.fromEntries(timedCues.map((t) => [t.id, t])) as Record<string, CueTimingOutput>,
@@ -425,6 +483,26 @@ export function RundownEditor({
     () => cues.reduce((s, c) => s + (c.cue_type === 'heading' ? 0 : c.duration_ms), 0),
     [cues]
   )
+
+  // Filters only affect which rows render — the timing/live pipeline above
+  // always sees every cue, so hiding a cue from view can never skip it live.
+  const filtersActive = hasActiveFilters(filters)
+  const visibility = useMemo(
+    () => computeCueVisibility(layout, filters, cells),
+    [layout, filters, cells]
+  )
+  const visibleCueCount = useMemo(
+    () => cues.filter((c) => c.cue_type !== 'heading' && visibility.cueIds.has(c.id)).length,
+    [cues, visibility]
+  )
+  const visibleDurationMs = useMemo(
+    () =>
+      cues.reduce(
+        (s, c) => s + (c.cue_type === 'heading' || !visibility.cueIds.has(c.id) ? 0 : c.duration_ms),
+        0
+      ),
+    [cues, visibility]
+  )
   const plannedEndMs =
     timedCues.length > 0
       ? timedCues[timedCues.length - 1].calculated_start_ms +
@@ -492,6 +570,7 @@ export function RundownEditor({
       duration_ms: 0,
       duration_mode: 'manual',
       scripts: [],
+      not_final: false,
       background_color: null,
       locked: false,
       created_at: new Date().toISOString(),
@@ -546,6 +625,7 @@ export function RundownEditor({
       duration_ms: 0,
       duration_mode: 'manual',
       scripts: [],
+      not_final: false,
       background_color: null,
       locked: false,
       created_at: new Date().toISOString(),
@@ -884,6 +964,13 @@ export function RundownEditor({
     return ids
   }, [layout, collapsedGroups])
 
+  // What SortableContext/JSX should actually render — visibleOrderIds() stays
+  // unfiltered so drag-reorder math keeps operating on the true document order.
+  const renderableIds = useMemo(
+    () => visibleOrderIds().filter((id) => visibility.cueIds.has(id) || visibility.headingIds.has(id)),
+    [visibleOrderIds, visibility]
+  )
+
   async function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event
     if (!over || active.id === over.id) return
@@ -1077,6 +1164,8 @@ export function RundownEditor({
           onOpenTrash={() => setTrashOpen(true)}
           searchCues={searchCues}
           onSearchSelect={handleSearchSelect}
+          status={rundownStatus}
+          onChangeStatus={handleChangeStatus}
           canUndo={history.canUndo}
           canRedo={history.canRedo}
           undoLabel={history.undoLabel}
@@ -1104,6 +1193,8 @@ export function RundownEditor({
         />
 
         {live.isLive && <TransportBar live={live} cues={liveCues} />}
+
+        <CueFilterBar columns={columns} cues={cues} cells={cells} filters={filters} onChange={setFilters} />
 
         {/* flex-1 wrapper is relative so BatchToolbar can float above content without pushing rows */}
         <div className="flex-1 overflow-hidden relative">
@@ -1180,32 +1271,39 @@ export function RundownEditor({
               onDragEnd={handleDragEnd}
               modifiers={[restrictToVerticalAxis]}
             >
-              <SortableContext items={visibleOrderIds()} strategy={verticalListSortingStrategy}>
+              <SortableContext items={renderableIds} strategy={verticalListSortingStrategy}>
                 {layout.items.map((item) => {
                   if (item.type === 'group') {
                     const collapsed = collapsedGroups.has(item.heading.id)
+                    const headingVisible = visibility.headingIds.has(item.heading.id)
+                    const visibleChildren = filtersActive
+                      ? item.children.filter((ch) => visibility.cueIds.has(ch.id))
+                      : item.children
+                    if (!headingVisible && visibleChildren.length === 0) return null
                     return (
                       <Fragment key={item.heading.id}>
-                        <GroupHeaderRow
-                          heading={item.heading}
-                          number={formatCueNumber(item.number, rundownSettings.cue_number_prefix, rundownSettings.cue_number_start, rundownSettings.cue_number_digits)}
-                          rundownId={rundown.id}
-                          aggregate={groupAggregate(item.children)}
-                          collapsed={collapsed}
-                          selected={selectedIds.has(item.heading.id)}
-                          rowWidth={rowWidth}
-                          timeFormat={rundownSettings.time_display}
-                          onToggleCollapse={() => toggleCollapse(item.heading.id)}
-                          onSelect={handleSelect}
-                          onUpdate={handleUpdateCue}
-                          onUngroup={handleUngroupOne}
-                          onDelete={handleDeleteGroup}
-                          onConvertToCue={handleConvertToCue}
-                          onAddAbove={(id) => handleAddCueAtHeading(id, 'above')}
-                          onAddBelow={(id) => handleAddCueAtHeading(id, 'below')}
-                        />
-                        {!collapsed &&
-                          item.children.map((ch) => {
+                        {headingVisible && (
+                          <GroupHeaderRow
+                            heading={item.heading}
+                            number={formatCueNumber(item.number, rundownSettings.cue_number_prefix, rundownSettings.cue_number_start, rundownSettings.cue_number_digits)}
+                            rundownId={rundown.id}
+                            aggregate={groupAggregate(visibleChildren)}
+                            collapsed={collapsed}
+                            selected={selectedIds.has(item.heading.id)}
+                            rowWidth={rowWidth}
+                            timeFormat={rundownSettings.time_display}
+                            onToggleCollapse={() => toggleCollapse(item.heading.id)}
+                            onSelect={handleSelect}
+                            onUpdate={handleUpdateCue}
+                            onUngroup={handleUngroupOne}
+                            onDelete={handleDeleteGroup}
+                            onConvertToCue={handleConvertToCue}
+                            onAddAbove={(id) => handleAddCueAtHeading(id, 'above')}
+                            onAddBelow={(id) => handleAddCueAtHeading(id, 'below')}
+                          />
+                        )}
+                        {(!headingVisible || !collapsed) &&
+                          visibleChildren.map((ch) => {
                             const timed = timedMap[ch.id]
                             return timed
                               ? renderCueRow(timed, layout.numberOf[ch.id] ?? '', 1, item.heading.background_color, item.heading.title, item.number)
@@ -1214,6 +1312,7 @@ export function RundownEditor({
                       </Fragment>
                     )
                   }
+                  if (!visibility.cueIds.has(item.cue.id)) return null
                   const timed = timedMap[item.cue.id]
                   return timed ? renderCueRow(timed, item.number, 0) : null
                 })}
@@ -1310,7 +1409,9 @@ export function RundownEditor({
             </>
           )}
           <div className="ml-auto font-mono text-[#888b96]">
-            {realCueCount} {realCueCount === 1 ? 'cue' : 'cues'} · {formatDuration(totalDurationMs)} total
+            {filtersActive
+              ? <>{visibleCueCount} of {realCueCount} {realCueCount === 1 ? 'cue' : 'cues'} · {formatDuration(visibleDurationMs)}</>
+              : <>{realCueCount} {realCueCount === 1 ? 'cue' : 'cues'} · {formatDuration(totalDurationMs)} total</>}
           </div>
         </div>
 
@@ -1341,6 +1442,14 @@ export function RundownEditor({
           onOpenChange={setTrashOpen}
           rundownId={rundown.id}
           onRestored={refreshCues}
+        />
+
+        <FinalizeWarningDialog
+          open={finalizeWarningOpen}
+          onOpenChange={setFinalizeWarningOpen}
+          notFinalCues={notFinalCues}
+          onScrollToCue={handleScrollToNotFinalCue}
+          onConfirm={() => commitStatusChange('finalized')}
         />
       </div>
     </RundownDataProvider>

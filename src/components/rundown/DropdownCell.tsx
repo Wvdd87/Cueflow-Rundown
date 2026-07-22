@@ -9,28 +9,11 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { upsertCell } from '@/app/actions/cues'
-import { uploadCellFile, isImageFile } from '@/lib/upload'
+import { uploadCellFile } from '@/lib/upload'
 import { ImageLightbox } from './ImageLightbox'
+import { parseDropdownCellValues as parseValues, serializeDropdownCellValues as serializeValues } from '@/lib/dropdownValues'
 import { toast } from 'sonner'
 import type { CellAttachment } from '@/lib/supabase/types'
-
-function parseValues(raw: string): string[] {
-  if (!raw) return []
-  if (raw.startsWith('[')) {
-    try {
-      const parsed = JSON.parse(raw)
-      if (Array.isArray(parsed))
-        return parsed.filter((v): v is string => typeof v === 'string' && !!v)
-    } catch {}
-  }
-  return [raw]
-}
-
-function serializeValues(values: string[]): string {
-  if (values.length === 0) return ''
-  if (values.length === 1) return values[0]
-  return JSON.stringify(values)
-}
 
 interface DropdownCellProps {
   cueId: string
