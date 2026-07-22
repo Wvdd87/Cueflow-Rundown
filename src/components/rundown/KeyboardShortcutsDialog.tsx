@@ -23,8 +23,8 @@ const GROUPS: ShortcutGroup[] = [
     title: 'Edit mode',
     rows: [
       ['Tab / Shift+Tab', 'Confirm the edit, move focus right / left'],
-      ['Shift+Enter', 'Confirm the edit, move focus down a row'],
-      ['Ctrl+Shift+Enter', 'Confirm the edit, move focus up a row'],
+      ['Enter', 'Confirm the edit, move focus down a row'],
+      ['Shift+Enter', 'Insert a new line in the focused field'],
       ['Escape', 'Confirm or cancel (field-dependent)'],
     ],
   },

@@ -293,7 +293,7 @@ function CellTipTap({
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
-      StarterKit.configure({ heading: false, hardBreak: false }),
+      StarterKit.configure({ heading: false }),
       Heading.configure({ levels: [1, 2, 3] }),
       HeadingSize,
       TextStyle,
@@ -318,6 +318,15 @@ function CellTipTap({
       attributes: {
         class:
           'tiptap-cell prose-invert focus:outline-none min-h-[28px] px-2 py-1 text-sm text-[#eef0f3]',
+      },
+      // Plain Enter is reserved for grid navigation (confirm + move down a row);
+      // Shift+Enter still inserts a line break via the default HardBreak binding.
+      handleKeyDown(_view, event) {
+        if (event.key === 'Enter' && !event.shiftKey) {
+          event.preventDefault()
+          return true
+        }
+        return false
       },
       handleDrop(view, event, _slice, moved) {
         if (moved) return false

@@ -210,15 +210,14 @@ export function useGridNavigation({
         moveHorizontal(e.shiftKey ? -1 : 1)
         return
       }
-      if (e.key === 'Enter' && e.shiftKey) {
+      // Plain Enter confirms and advances to the same column, next row (creating
+      // a new cue past the last row). Shift+Enter is left alone — it's the
+      // multiline fields' own newline shortcut, not a navigation key.
+      if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault()
         confirmEditing()
-        if (e.ctrlKey) {
-          moveVertical(-1)
-        } else {
-          const atBottom = moveVertical(1)
-          if (atBottom) onAddCueAtEnd()
-        }
+        const atBottom = moveVertical(1)
+        if (atBottom) onAddCueAtEnd()
       }
     }
     document.addEventListener('keydown', onKeyDown)

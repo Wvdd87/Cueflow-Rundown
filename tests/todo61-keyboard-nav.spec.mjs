@@ -143,6 +143,44 @@ try {
     .catch(() => false)
   assert(!stillEditing, 'Tab closed the title editor (confirmed, not left open)')
 
+  // 9b. Plain Enter while editing confirms + moves down a row; Shift+Enter
+  // inserts a newline in the field instead of navigating. Clicking a private
+  // note opens it directly (no separate Enter needed), so wait for the editor
+  // before typing to avoid racing the click-driven autofocus.
+  log('Checking Enter confirms+moves-down, Shift+Enter inserts a newline')
+  await page.locator('[data-col-id="__private-notes__"]').first().click()
+  await page
+    .locator('[data-col-id="__private-notes__"]').first()
+    .locator('.tiptap-cell[contenteditable="true"]')
+    .waitFor({ state: 'visible', timeout: 3000 })
+  await page.keyboard.type('line one', { delay: 20 })
+  await page.keyboard.press('Shift+Enter')
+  await page.waitForTimeout(150)
+  await page.keyboard.type('line two', { delay: 20 })
+  // Still mid-edit here (no confirm happened yet) — read the live editor, not
+  // the display div, which only exists once the note is saved and unmounted.
+  const noteEditor = page.locator('[data-col-id="__private-notes__"]').first().locator('.tiptap-cell[contenteditable="true"]')
+  assert(await noteEditor.isVisible(), 'still editing after Shift+Enter (not navigated away)')
+  await page.waitForFunction(
+    () => document.querySelector('[data-col-id="__private-notes__"] .tiptap-cell[contenteditable="true"]')?.innerHTML.includes('line two'),
+    { timeout: 3000 }
+  )
+  const noteHtml = await noteEditor.innerHTML()
+  assert(/line one/.test(noteHtml) && /line two/.test(noteHtml), 'Shift+Enter kept both lines in the same field')
+
+  await page.keyboard.press('Enter')
+  await page.waitForTimeout(200)
+  assert(
+    await focusRingVisible(page.locator('[data-col-id="__private-notes__"]').nth(1)),
+    'plain Enter confirmed the note and moved focus down a row'
+  )
+  const stillEditingNote = await page
+    .locator('[data-col-id="__private-notes__"]').first()
+    .locator('.tiptap-cell[contenteditable="true"]')
+    .isVisible()
+    .catch(() => false)
+  assert(!stillEditingNote, 'Enter closed the private-note editor (confirmed, not left open)')
+
   // 10. Ctrl+Enter in focus mode inserts a cue below the focused row.
   log('Checking Ctrl+Enter inserts a cue below')
   const before = await page.locator('[data-testid="cue-settings-btn"]').count()
