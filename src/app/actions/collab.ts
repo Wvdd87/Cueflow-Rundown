@@ -147,6 +147,50 @@ export async function collabGetRundownCues(token: string) {
   return { cues: d.cues ?? [], cells: d.cells ?? [] }
 }
 
+export async function collabGroupCues(token: string, ids: string[]) {
+  const supabase = await createClient()
+  const { data, error } = await (supabase.rpc as unknown as RpcFn)('collab_group_cues', {
+    p_token: token,
+    p_ids: ids,
+  })
+  if (error) return { error: String(error) }
+  return { groupId: data as string }
+}
+
+export async function collabUngroupCues(token: string, ids: string[]) {
+  const supabase = await createClient()
+  const { error } = await (supabase.rpc as unknown as RpcFn)('collab_ungroup_cues', {
+    p_token: token,
+    p_ids: ids,
+  })
+  if (error) return { error: String(error) }
+  return { success: true }
+}
+
+// ---------------------------------------------------------------------------
+// Private notes — scoped to this one collaboration link, not shared with the
+// owner or any other link (reuses the share_private_notes table).
+// ---------------------------------------------------------------------------
+
+export async function collabGetPrivateNotes(token: string) {
+  const supabase = await createClient()
+  const { data, error } = await (supabase.rpc as unknown as RpcFn)('get_collab_private_notes', { p_token: token })
+  if (error) return { notes: {} as Record<string, string>, error: String(error) }
+  const arr = (data as { cue_id: string; content: string }[] | null) ?? []
+  return { notes: Object.fromEntries(arr.map((n) => [n.cue_id, n.content])) }
+}
+
+export async function collabUpsertPrivateNote(token: string, cueId: string, content: string) {
+  const supabase = await createClient()
+  const { error } = await (supabase.rpc as unknown as RpcFn)('upsert_collab_private_note', {
+    p_token: token,
+    p_cue_id: cueId,
+    p_content: content,
+  })
+  if (error) return { error: String(error) }
+  return { success: true }
+}
+
 // ---------------------------------------------------------------------------
 // Columns — mirrors src/app/actions/columns.ts.
 // ---------------------------------------------------------------------------

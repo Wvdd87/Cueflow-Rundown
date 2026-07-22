@@ -157,7 +157,7 @@ export function CueRow({
   focusedColId = null,
   onCellFocus,
 }: CueRowProps) {
-  const { trackSave, actions, collab } = useRundownData()
+  const { trackSave, actions } = useRundownData()
   const [editingDuration, setEditingDuration] = useState(false)
   const [durationInput, setDurationInput] = useState('')
   const [editingTitle, setEditingTitle] = useState(focusTitle)
@@ -725,16 +725,11 @@ export function CueRow({
                   data-col-id={PRIVATE_NOTES_ID}
                   style={{ ...tile(privateNotesWidth, { padding: '10px 2px' }), ...ringStyle(PRIVATE_NOTES_ID) }}
                 >
-                  {/* Private notes are per-authenticated-user — not available to
-                      collaboration links, which have no such identity. */}
-                  {!collab && (
-                    <PrivateNoteCell
-                      cueId={cue.id}
-                      rundownId={rundownId}
-                      value={privateNote}
-                      onChange={onPrivateNoteChange}
-                    />
-                  )}
+                  <PrivateNoteCell
+                    cueId={cue.id}
+                    value={privateNote}
+                    onChange={onPrivateNoteChange}
+                  />
                 </div>
               )
             }

@@ -49,6 +49,7 @@ import {
 } from '@/lib/rundownStatus'
 import type { Rundown, Column, Cue } from '@/lib/supabase/types'
 import type { CollabContext } from './RundownDataContext'
+import type { PresenceUser } from './liveSync'
 
 interface RundownHeaderProps {
   rundown: Rundown
@@ -63,6 +64,8 @@ interface RundownHeaderProps {
    *  controls (rename, Settings, Trash, Save as template, Share, Dashboard)
    *  and points exports at the token-gated routes. */
   collab?: CollabContext | null
+  /** Everyone else who currently has this rundown open (owner + other links). */
+  presentOthers?: PresenceUser[]
   onOpenSettings: (tab?: 'display' | 'numbering') => void
   onOpenMentions: (tab?: 'mentions' | 'variables') => void
   onResetTiming: () => void
@@ -106,6 +109,7 @@ export function RundownHeader({
   canRunShow,
   showLeaderLabel,
   collab,
+  presentOthers = [],
   onOpenSettings,
   onOpenMentions,
   onResetTiming,
@@ -259,6 +263,21 @@ export function RundownHeader({
       <RundownSearch cues={searchCues} onSelect={onSearchSelect} />
 
       <SaveIndicator status={saveStatus} />
+
+      {presentOthers.length > 0 && (
+        <div data-testid="presence-list" className="flex items-center gap-1 shrink-0" title={presentOthers.map((u) => u.label).join(', ')}>
+          {presentOthers.slice(0, 5).map((u) => (
+            <span
+              key={u.id}
+              className="w-2 h-2 rounded-full shrink-0"
+              style={{ background: u.color }}
+            />
+          ))}
+          <span className="font-cond text-[10px] font-bold uppercase tracking-[0.1em] text-[#7c7e8a] ml-0.5">
+            {presentOthers.length} active
+          </span>
+        </div>
+      )}
 
       {collab && (
         <span

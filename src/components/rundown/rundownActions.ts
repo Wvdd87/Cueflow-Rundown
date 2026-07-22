@@ -2,6 +2,7 @@
 
 import * as adminCues from '@/app/actions/cues'
 import * as adminColumns from '@/app/actions/columns'
+import { upsertPrivateNote } from '@/app/actions/privateNotes'
 import * as collab from '@/app/actions/collab'
 import type { Cue, Cell, Column, CellAttachment } from '@/lib/supabase/types'
 
@@ -47,6 +48,11 @@ export interface RundownActions {
   ) => Promise<{ error?: string }>
   updateColumnWidth: (id: string, width: number) => Promise<{ error?: string }>
   reorderColumns: (orderedIds: string[]) => Promise<{ error?: string }>
+  groupCues: (ids: string[]) => Promise<{ groupId?: string; error?: string }>
+  ungroupCues: (ids: string[]) => Promise<{ error?: string }>
+  /** Private notes are per-viewer: the admin's own (auth-scoped) or a single
+   *  collaboration link's own (token-scoped) — never shared between the two. */
+  upsertPrivateNote: (cueId: string, content: string) => Promise<{ error?: string }>
 }
 
 export function createAdminActions(rundownId: string): RundownActions {
@@ -71,6 +77,9 @@ export function createAdminActions(rundownId: string): RundownActions {
       adminColumns.updateColumnOptions(id, options, rundownId, optionColors),
     updateColumnWidth: (id, width) => adminColumns.updateColumnWidth(id, width, rundownId),
     reorderColumns: (orderedIds) => adminColumns.reorderColumns(rundownId, orderedIds),
+    groupCues: (ids) => adminCues.groupCues(rundownId, ids),
+    ungroupCues: (ids) => adminCues.ungroupCues(rundownId, ids),
+    upsertPrivateNote: (cueId, content) => upsertPrivateNote(cueId, rundownId, content),
   }
 }
 
@@ -98,5 +107,8 @@ export function createCollabActions(token: string): RundownActions {
       collab.collabUpdateColumnOptions(token, id, options, optionColors),
     updateColumnWidth: (id, width) => collab.collabUpdateColumnWidth(token, id, width),
     reorderColumns: (orderedIds) => collab.collabReorderColumns(token, orderedIds),
+    groupCues: (ids) => collab.collabGroupCues(token, ids),
+    ungroupCues: (ids) => collab.collabUngroupCues(token, ids),
+    upsertPrivateNote: (cueId, content) => collab.collabUpsertPrivateNote(token, cueId, content),
   }
 }

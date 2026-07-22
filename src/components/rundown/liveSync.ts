@@ -161,3 +161,53 @@ export function useLeaderState(rundownId: string): LeaderState & { refresh: () =
 
   return { ...state, refresh }
 }
+
+// ── Presence — who's currently connected to this rundown ────────────────────
+
+const PRESENCE_COLORS = [
+  '#f0a838', '#5aa0e6', '#18d986', '#ff5a73', '#a855f7', '#5fe0a0', '#ffba50', '#7dd3fc',
+]
+
+/** Deterministic color per identity — stable across reconnects without
+ *  needing to persist anything (a link's own id/token is already stable). */
+export function colorForIdentity(id: string): string {
+  let hash = 0
+  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) >>> 0
+  return PRESENCE_COLORS[hash % PRESENCE_COLORS.length]
+}
+
+export interface PresenceUser {
+  id: string
+  label: string
+  color: string
+}
+
+/** Tracks who else currently has this rundown open — the owner and any
+ *  collaboration links. Uses Supabase Realtime's own presence primitive
+ *  (channel.track/presenceState), so joins/leaves (including tab close) are
+ *  handled by the socket lifecycle rather than a manual heartbeat. */
+export function usePresence(rundownId: string, me: PresenceUser | null): PresenceUser[] {
+  const [others, setOthers] = useState<PresenceUser[]>([])
+
+  useEffect(() => {
+    if (!me) return
+    const supa = createClient()
+    const channel = supa.channel(`rundown-presence-${rundownId}`, {
+      config: { presence: { key: me.id } },
+    })
+    channel.on('presence', { event: 'sync' }, () => {
+      const state = channel.presenceState() as Record<string, PresenceUser[]>
+      const all = Object.values(state).flat()
+      setOthers(all.filter((u) => u.id !== me.id))
+    })
+    channel.subscribe((status) => {
+      if (status === 'SUBSCRIBED') channel.track(me)
+    })
+    return () => {
+      supa.removeChannel(channel)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rundownId, me?.id, me?.label, me?.color])
+
+  return others
+}

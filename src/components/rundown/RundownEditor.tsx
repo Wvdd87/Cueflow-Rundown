@@ -19,9 +19,6 @@ import {
   arrayMove,
 } from '@dnd-kit/sortable'
 import { restrictToVerticalAxis } from '@dnd-kit/modifiers'
-// Group create/dissolve stay admin-only for now (see the `collab` prop docs
-// below) — everything else routes through the actions adapter.
-import { groupCues, ungroupCues } from '@/app/actions/cues'
 import { updateRundownStatus, takeShowControl } from '@/app/actions/rundowns'
 import { normalizeStatus, type RundownStatus } from '@/lib/rundownStatus'
 import { createAdminActions, createCollabActions } from './rundownActions'
@@ -49,7 +46,7 @@ import { KeyboardShortcutsDialog } from './KeyboardShortcutsDialog'
 import { buildCueLayout, formatCueNumber } from './cueTree'
 import { CF, totalRowWidth } from './layout'
 import { useLiveShow } from './useLiveShow'
-import { useBroadcastLive, useLeaderState } from './liveSync'
+import { useBroadcastLive, useLeaderState, useLiveSubscription, usePresence, colorForIdentity } from './liveSync'
 import {
   calculateTimings,
   formatMsToTimeDisplay,
@@ -407,6 +404,77 @@ export function RundownEditor({
   )
   const live = useLiveShow(liveCues)
 
+  // Show control: null leaderToken means the owner is driving (the default).
+  // A collaboration link with canRunShow can take control instead — this
+  // gate stops our own idle/stale state from clobbering their broadcast.
+  const leader = useLeaderState(rundown.id)
+  const myLeaderIdentity = collab ? collab.token : null
+  const isShowLeader = leader.leaderToken === myLeaderIdentity
+  const canRunShow = !collab || collab.canRunShow
+
+  // Presence — who else currently has this rundown open.
+  const ownerSessionIdRef = useRef<string>(crypto.randomUUID())
+  const me = useMemo(
+    () =>
+      collab
+        ? { id: collab.token, label: collab.label, color: colorForIdentity(collab.token) }
+        : { id: ownerSessionIdRef.current, label: 'Owner', color: colorForIdentity('owner') },
+    [collab]
+  )
+  const presentOthers = usePresence(rundown.id, me)
+
+  // Broadcast the live show state (incl. timing) to read-only viewers
+  useBroadcastLive(rundown.id, {
+    activeCueId: live.activeCueId,
+    nextCueId: live.nextCueId,
+    status: live.status,
+    elapsedMs: live.elapsedMs,
+    durationMs: live.activeDurationMs,
+    isLive: live.isLive,
+  }, isShowLeader)
+
+  // Demotion: notify if someone else takes over show control out from
+  // under us — our Run Show UI silently goes read-only otherwise.
+  const wasLeaderRef = useRef(isShowLeader)
+  useEffect(() => {
+    if (wasLeaderRef.current && !isShowLeader) {
+      toast(`Show control has been taken by ${leader.leaderLabel}. You are now in view mode.`)
+    }
+    wasLeaderRef.current = isShowLeader
+  }, [isShowLeader, leader.leaderLabel])
+
+  // Owner/non-driving-collaborator follow mode: when someone else is
+  // leading, mirror their broadcast state instead of our own (idle) local
+  // state, so the current/next cue highlighting and countdown still track
+  // the live show. When we ARE the leader, our own state is authoritative
+  // and zero-latency, so we use that instead of round-tripping our own
+  // broadcast back through the subscription.
+  const remoteLive = useLiveSubscription(rundown.id)
+  const effectiveLive = useMemo(() => {
+    if (isShowLeader) {
+      return {
+        isLive: live.isLive,
+        activeCueId: live.activeCueId,
+        nextCueId: live.nextCueId,
+        remainingMs: live.remainingMs,
+        elapsedMs: live.elapsedMs,
+        getElapsedMs: live.getElapsedMs,
+      }
+    }
+    const remoteIsLive = remoteLive.status === 'running' || remoteLive.status === 'paused'
+    const getElapsed = () =>
+      remoteLive.status === 'running' ? remoteLive.elapsedMs + (Date.now() - remoteLive.sentAt) : remoteLive.elapsedMs
+    return {
+      isLive: remoteIsLive,
+      activeCueId: remoteLive.activeCueId,
+      nextCueId: remoteLive.nextCueId,
+      remainingMs: remoteLive.durationMs - getElapsed(),
+      elapsedMs: getElapsed(),
+      getElapsedMs: getElapsed,
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isShowLeader, live.isLive, live.activeCueId, live.nextCueId, live.remainingMs, live.elapsedMs, remoteLive])
+
   // Live transport keyboard shortcuts: Space / ArrowDown = next cue, ArrowUp = previous.
   // Stable ref so the keydown handler never needs to re-register.
   const liveRef = useRef(live)
@@ -437,20 +505,20 @@ export function RundownEditor({
 
   const scrollActiveCueToTop = useCallback(() => {
     const cont = cueScrollRef.current
-    if (!cont || !live.activeCueId) return
-    const row = cont.querySelector<HTMLElement>(`[data-cue-id="${live.activeCueId}"]`)
+    if (!cont || !effectiveLive.activeCueId) return
+    const row = cont.querySelector<HTMLElement>(`[data-cue-id="${effectiveLive.activeCueId}"]`)
     if (!row) return
     const cr = cont.getBoundingClientRect()
     const rr = row.getBoundingClientRect()
     cont.scrollTo({ top: cont.scrollTop + (rr.top - cr.top) - (CF.headerH + 8), behavior: 'smooth' })
-  }, [live.activeCueId])
+  }, [effectiveLive.activeCueId])
 
   useEffect(() => {
     const cont = cueScrollRef.current
-    if (!cont || !live.isLive) { setShowJumpToCurrent(false); return }
+    if (!cont || !effectiveLive.isLive) { setShowJumpToCurrent(false); return }
     function check() {
-      if (!cont || !live.activeCueId) { setShowJumpToCurrent(false); return }
-      const row = cont.querySelector<HTMLElement>(`[data-cue-id="${live.activeCueId}"]`)
+      if (!cont || !effectiveLive.activeCueId) { setShowJumpToCurrent(false); return }
+      const row = cont.querySelector<HTMLElement>(`[data-cue-id="${effectiveLive.activeCueId}"]`)
       if (!row) { setShowJumpToCurrent(false); return }
       const cr = cont.getBoundingClientRect()
       const rr = row.getBoundingClientRect()
@@ -462,25 +530,7 @@ export function RundownEditor({
     cont.addEventListener('scroll', check, { passive: true })
     check()
     return () => cont.removeEventListener('scroll', check)
-  }, [live.isLive, live.activeCueId])
-
-  // Show control: null leaderToken means the owner is driving (the default).
-  // A collaboration link with canRunShow can take control instead — this
-  // gate stops our own idle/stale state from clobbering their broadcast.
-  const leader = useLeaderState(rundown.id)
-  const myLeaderIdentity = collab ? collab.token : null
-  const isShowLeader = leader.leaderToken === myLeaderIdentity
-  const canRunShow = !collab || collab.canRunShow
-
-  // Broadcast the live show state (incl. timing) to read-only viewers
-  useBroadcastLive(rundown.id, {
-    activeCueId: live.activeCueId,
-    nextCueId: live.nextCueId,
-    status: live.status,
-    elapsedMs: live.elapsedMs,
-    durationMs: live.activeDurationMs,
-    isLive: live.isLive,
-  }, isShowLeader)
+  }, [effectiveLive.isLive, effectiveLive.activeCueId])
 
   const firstCueId = liveCues[0]?.id ?? null
   // Auto-start toggle between cues: shown only when the next cue is soft-start.
@@ -974,7 +1024,7 @@ export function RundownEditor({
   const handleGroup = useCallback(async () => {
     const ids = [...selectedIds]
     if (ids.length === 0) return
-    const r = await groupCues(rundown.id, ids)
+    const r = await actions.groupCues(ids)
     if (r.error) return toast.error(r.error)
     await refreshCues()
     setSelectedIds(new Set())
@@ -983,14 +1033,14 @@ export function RundownEditor({
   const handleUngroup = useCallback(async () => {
     const ids = [...selectedIds]
     if (ids.length === 0) return
-    const r = await ungroupCues(rundown.id, ids)
+    const r = await actions.ungroupCues(ids)
     if (r.error) return toast.error(r.error)
     await refreshCues()
     setSelectedIds(new Set())
   }, [selectedIds, rundown.id, refreshCues])
 
   const handleUngroupOne = useCallback(async (headingId: string) => {
-    const r = await ungroupCues(rundown.id, [headingId])
+    const r = await actions.ungroupCues([headingId])
     if (r.error) return toast.error(r.error)
     await refreshCues()
   }, [rundown.id, refreshCues])
@@ -1186,12 +1236,12 @@ export function RundownEditor({
         onToggleScriptCollapsed={handleToggleScriptCollapsed}
         onSetDurationMode={handleSetDurationMode}
         focusScriptId={focusScriptId}
-        live={live.isLive}
-        isActive={cue.id === live.activeCueId}
-        isNext={cue.id === live.nextCueId}
-        liveRemainingMs={cue.id === live.activeCueId ? live.remainingMs : null}
-        liveElapsedMs={cue.id === live.activeCueId ? live.elapsedMs : null}
-        liveGetElapsedMs={cue.id === live.activeCueId ? live.getElapsedMs : undefined}
+        live={effectiveLive.isLive}
+        isActive={cue.id === effectiveLive.activeCueId}
+        isNext={cue.id === effectiveLive.nextCueId}
+        liveRemainingMs={cue.id === effectiveLive.activeCueId ? effectiveLive.remainingMs : null}
+        liveElapsedMs={cue.id === effectiveLive.activeCueId ? effectiveLive.elapsedMs : null}
+        liveGetElapsedMs={cue.id === effectiveLive.activeCueId ? effectiveLive.getElapsedMs : undefined}
         onJump={live.jumpTo}
         privateNote={privateNotes[cue.id] ?? ''}
         onPrivateNoteChange={handlePrivateNoteChange}
@@ -1238,6 +1288,7 @@ export function RundownEditor({
           canRunShow={canRunShow}
           showLeaderLabel={!isShowLeader ? leader.leaderLabel : null}
           collab={collab}
+          presentOthers={presentOthers}
           onOpenSettings={(tab) => {
             setSettingsTab(tab ?? 'display')
             setSettingsOpen(true)
@@ -1288,7 +1339,10 @@ export function RundownEditor({
           }}
         />
 
-        {live.isLive && <TransportBar live={live} cues={liveCues} />}
+        {isShowLeader && live.isLive && <TransportBar live={live} cues={liveCues} />}
+        {!isShowLeader && effectiveLive.isLive && (
+          <FollowProgressBar elapsedMs={effectiveLive.elapsedMs} durationMs={effectiveLive.remainingMs + effectiveLive.elapsedMs} />
+        )}
 
         {/* flex-1 wrapper is relative so BatchToolbar can float above content without pushing rows */}
         <div className="flex-1 overflow-hidden relative">
@@ -1297,7 +1351,6 @@ export function RundownEditor({
               <BatchToolbar
                 count={selectedIds.size}
                 canUngroup={canUngroup}
-                hideGroup={!!collab}
                 onSelectAll={handleSelectAll}
                 onDuplicate={handleDuplicate}
                 duplicating={batchDuplicating}
@@ -1391,7 +1444,7 @@ export function RundownEditor({
                             onToggleCollapse={() => toggleCollapse(item.heading.id)}
                             onSelect={handleSelect}
                             onUpdate={handleUpdateCue}
-                            onUngroup={collab ? undefined : handleUngroupOne}
+                            onUngroup={handleUngroupOne}
                             onDelete={handleDeleteGroup}
                             onConvertToCue={handleConvertToCue}
                             onAddAbove={(id) => handleAddCueAtHeading(id, 'above')}
@@ -1463,7 +1516,7 @@ export function RundownEditor({
             </div>
 
             {/* Live spacer — lets even the last cue pin to the top */}
-            {live.isLive && <div style={{ height: '72vh' }} aria-hidden />}
+            {effectiveLive.isLive && <div style={{ height: '72vh' }} aria-hidden />}
           </div>{/* end rows wrapper */}
           </div>{/* end min-width wrapper */}
           </div>{/* end single scroll container */}
@@ -1476,13 +1529,13 @@ export function RundownEditor({
             <span
               className={cn(
                 'font-mono tabular-nums',
-                live.isLive ? 'text-[#5a5c66] line-through' : 'text-[#c8c9d0]'
+                effectiveLive.isLive ? 'text-[#5a5c66] line-through' : 'text-[#c8c9d0]'
               )}
             >
               {formatMsToTimeDisplay(plannedEndMs, rundownSettings.time_display)}
             </span>
           </div>
-          {live.isLive && (
+          {isShowLeader && live.isLive && (
             <>
               <div className="flex items-center gap-2">
                 <span className="font-cond text-[9px] font-bold uppercase tracking-[0.14em] text-[#888b96]">Calculated end</span>
@@ -1514,7 +1567,7 @@ export function RundownEditor({
         </div>
 
         {/* Jump back to the live cue when it's scrolled out of view */}
-        {live.isLive && showJumpToCurrent && (
+        {effectiveLive.isLive && showJumpToCurrent && (
           <button
             onClick={scrollActiveCueToTop}
             className="fixed bottom-[54px] left-1/2 -translate-x-1/2 z-40 inline-flex items-center gap-2 h-9 px-4 font-cond text-[11px] font-bold uppercase tracking-[0.12em] bg-[#f0a838] text-[#06060a] border border-[#f0a838] hover:bg-[#ffba50] shadow-[0_12px_34px_rgba(0,0,0,0.65)] transition-colors"
@@ -1553,5 +1606,17 @@ export function RundownEditor({
         <KeyboardShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
       </div>
     </RundownDataProvider>
+  )
+}
+
+/** Read-only progress bar for anyone following the show without driving it —
+ *  mirrors TransportBar's embedded bar, but with no controls. */
+function FollowProgressBar({ elapsedMs, durationMs }: { elapsedMs: number; durationMs: number }) {
+  const pct = durationMs > 0 ? Math.min(100, (elapsedMs / durationMs) * 100) : 0
+  const over = durationMs > 0 && elapsedMs > durationMs
+  return (
+    <div className="shrink-0 h-[3px] bg-[rgba(255,255,255,0.08)]">
+      <div className="h-full transition-[width]" style={{ width: `${pct}%`, background: over ? '#ff2848' : '#f0a838' }} />
+    </div>
   )
 }

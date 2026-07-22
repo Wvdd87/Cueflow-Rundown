@@ -41,6 +41,12 @@ export default async function CollabPage({
 
   const payload = data as unknown as CollabRpcPayload
 
+  const { data: notesData } = await (supabase.rpc as unknown as (fn: string, args: Record<string, unknown>) => RpcResult)(
+    'get_collab_private_notes', { p_token: token }
+  )
+  const notesArr = (notesData as { cue_id: string; content: string }[] | null) ?? []
+  const initialPrivateNotes = Object.fromEntries(notesArr.map((n) => [n.cue_id, n.content]))
+
   return (
     <RundownEditor
       rundown={payload.rundown}
@@ -49,7 +55,7 @@ export default async function CollabPage({
       initialCells={payload.cells}
       initialMentions={payload.mentions}
       initialVariables={payload.variables}
-      initialPrivateNotes={{}}
+      initialPrivateNotes={initialPrivateNotes}
       collab={{
         token,
         label: payload.collab.label,
