@@ -20,12 +20,15 @@ import {
   LayoutTemplate,
   Undo2,
   Redo2,
+  Loader2,
 } from 'lucide-react'
 import {
   renameRundown,
   saveAsTemplate,
 } from '@/app/actions/rundowns'
 import { ShareDialog } from './ShareDialog'
+import { SaveIndicator } from './SaveIndicator'
+import type { SaveStatus } from './RundownDataContext'
 import { RundownSearch } from './RundownSearch'
 import type { SearchCue } from './RundownSearch'
 import { CueFilterButton, CueFilterChipsRow } from './CueFilterBar'
@@ -63,7 +66,9 @@ interface RundownHeaderProps {
   searchCues: SearchCue[]
   onSearchSelect: (id: string) => void
   status: RundownStatus
+  statusSaving?: boolean
   onChangeStatus: (next: RundownStatus) => void
+  saveStatus: SaveStatus
   cues: Cue[]
   cells: Record<string, string>
   filters: CueFilterState
@@ -100,7 +105,9 @@ export function RundownHeader({
   searchCues,
   onSearchSelect,
   status,
+  statusSaving,
   onChangeStatus,
+  saveStatus,
   cues,
   cells,
   filters,
@@ -177,18 +184,21 @@ export function RundownHeader({
       )}
 
       {/* Status badge + selector */}
-      <DropdownMenu open={statusOpen} onOpenChange={setStatusOpen}>
+      <DropdownMenu open={statusSaving ? false : statusOpen} onOpenChange={setStatusOpen}>
         <DropdownMenuTrigger
           render={
             <button
               data-testid="status-badge"
-              title="Change status"
-              className="inline-flex items-center gap-1.5 px-[7px] py-[3px] font-cond text-[10px] font-bold uppercase tracking-[0.14em] cursor-pointer shrink-0"
+              title={statusSaving ? 'Saving status…' : 'Change status'}
+              disabled={statusSaving}
+              className="inline-flex items-center gap-1.5 px-[7px] py-[3px] font-cond text-[10px] font-bold uppercase tracking-[0.14em] cursor-pointer shrink-0 disabled:cursor-wait"
               style={{ background: cf.bg, border: `1px solid ${cf.bd}`, color: cf.fg }}
             />
           }
         >
-          <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'currentColor' }} />
+          {statusSaving
+            ? <Loader2 className="w-2.5 h-2.5 animate-spin" />
+            : <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'currentColor' }} />}
           {STATUS_CONFIG[status].label}
         </DropdownMenuTrigger>
         <DropdownMenuContent
@@ -227,6 +237,8 @@ export function RundownHeader({
       <CueFilterButton columns={columns} cues={cues} cells={cells} filters={filters} onChange={onFiltersChange} />
 
       <RundownSearch cues={searchCues} onSelect={onSearchSelect} />
+
+      <SaveIndicator status={saveStatus} />
 
       {/* Undo / Redo */}
       <div className="flex items-center">

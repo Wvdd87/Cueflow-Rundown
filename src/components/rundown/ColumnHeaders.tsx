@@ -43,6 +43,7 @@ import {
   updateColumnWidth,
   reorderColumns,
 } from '@/app/actions/columns'
+import { useRundownData } from './RundownDataContext'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -141,6 +142,7 @@ export function ColumnHeaders({
   onExpandAllScripts,
   onCollapseAllScripts,
 }: ColumnHeadersProps) {
+  const { trackSave } = useRundownData()
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
 
@@ -309,7 +311,7 @@ export function ColumnHeaders({
         .filter((c): c is Column => !!c)
       const fullOrder = [...reorderedVisible, ...hidden].map((c, i) => ({ ...c, position: i }))
       onColumnsChange(fullOrder)
-      const result = await reorderColumns(rundownId, fullOrder.map((c) => c.id))
+      const result = await trackSave(reorderColumns(rundownId, fullOrder.map((c) => c.id)))
       if (result.error) toast.error(result.error)
     }
   }

@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { upsertCell } from '@/app/actions/cues'
+import { useRundownData } from './RundownDataContext'
 
 interface CellEditorProps {
   cueId: string
@@ -18,6 +19,7 @@ export function CellEditor({
   initialContent,
   onContentChange,
 }: CellEditorProps) {
+  const { trackSave } = useRundownData()
   const [editing, setEditing] = useState(false)
   const [value, setValue] = useState(initialContent)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -39,7 +41,7 @@ export function CellEditor({
     setEditing(false)
     if (value === initialContent) return
     onContentChange(cueId, columnId, value)
-    await upsertCell(cueId, columnId, value, rundownId)
+    await trackSave(upsertCell(cueId, columnId, value, rundownId))
   }
 
   if (editing) {

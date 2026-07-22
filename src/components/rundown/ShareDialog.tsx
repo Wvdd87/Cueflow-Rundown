@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Link2, Copy, Check, Trash2, Globe, Plus } from 'lucide-react'
+import { Link2, Copy, Check, Trash2, Globe, Plus, Loader2 } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -24,6 +24,7 @@ interface ShareDialogProps {
 export function ShareDialog({ rundownId, columns, open, onOpenChange }: ShareDialogProps) {
   const [shares, setShares] = useState<RundownShare[]>([])
   const [loading, setLoading] = useState(false)
+  const [creating, setCreating] = useState(false)
   const [newLabel, setNewLabel] = useState('')
   const [copiedId, setCopiedId] = useState<string | null>(null)
 
@@ -38,13 +39,17 @@ export function ShareDialog({ rundownId, columns, open, onOpenChange }: ShareDia
   }, [open, rundownId])
 
   const handleCreate = useCallback(async () => {
-    setLoading(true)
-    const r = await createShare(rundownId, newLabel, null) // null = all columns
-    setLoading(false)
-    if (r.error) return toast.error(r.error)
-    if (r.share) {
-      setShares((prev) => [...prev, r.share!])
-      setNewLabel('')
+    setCreating(true)
+    try {
+      const r = await createShare(rundownId, newLabel, null) // null = all columns
+      if (r.error) return toast.error(r.error)
+      if (r.share) {
+        setShares((prev) => [...prev, r.share!])
+        setNewLabel('')
+        toast.success('Link ready')
+      }
+    } finally {
+      setCreating(false)
     }
   }, [rundownId, newLabel])
 
@@ -176,10 +181,17 @@ export function ShareDialog({ rundownId, columns, open, onOpenChange }: ShareDia
               onChange={(e) => setNewLabel(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') handleCreate() }}
               placeholder="New link name (optional)"
-              className={FIELD}
+              disabled={creating}
+              className={cn(FIELD, creating && 'opacity-60')}
             />
-            <button data-testid="create-share" onClick={handleCreate} disabled={loading} className={cn(BTN_PRIMARY, 'shrink-0')}>
-              <Plus className="w-4 h-4" /> Create link
+            <button
+              data-testid="create-share"
+              onClick={handleCreate}
+              disabled={creating}
+              className={cn(BTN_PRIMARY, 'shrink-0', creating && 'opacity-70 pointer-events-none')}
+            >
+              {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+              {creating ? 'Generating link…' : 'Create link'}
             </button>
           </div>
         </div>

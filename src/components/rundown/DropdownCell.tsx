@@ -11,6 +11,7 @@ import {
 import { upsertCell } from '@/app/actions/cues'
 import { uploadCellFile } from '@/lib/upload'
 import { ImageLightbox } from './ImageLightbox'
+import { useRundownData } from './RundownDataContext'
 import { parseDropdownCellValues as parseValues, serializeDropdownCellValues as serializeValues } from '@/lib/dropdownValues'
 import { toast } from 'sonner'
 import type { CellAttachment } from '@/lib/supabase/types'
@@ -41,6 +42,7 @@ export function DropdownCell({
   onContentChange,
   onAttachmentsChange,
 }: DropdownCellProps) {
+  const { trackSave } = useRundownData()
   const values = parseValues(value)
   const remaining = options.filter((o) => !values.includes(o))
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -50,13 +52,13 @@ export function DropdownCell({
   async function addValue(v: string) {
     const next = serializeValues([...values, v])
     onContentChange(cueId, columnId, next)
-    await upsertCell(cueId, columnId, next, rundownId)
+    await trackSave(upsertCell(cueId, columnId, next, rundownId))
   }
 
   async function removeValue(v: string) {
     const next = serializeValues(values.filter((x) => x !== v))
     onContentChange(cueId, columnId, next)
-    await upsertCell(cueId, columnId, next, rundownId)
+    await trackSave(upsertCell(cueId, columnId, next, rundownId))
   }
 
   /** Swap one selected value for another, in place — the fix for "can't change a
@@ -64,7 +66,7 @@ export function DropdownCell({
   async function replaceValue(oldV: string, newV: string) {
     const next = serializeValues(values.map((x) => (x === oldV ? newV : x)))
     onContentChange(cueId, columnId, next)
-    await upsertCell(cueId, columnId, next, rundownId)
+    await trackSave(upsertCell(cueId, columnId, next, rundownId))
   }
 
   async function addAttachments(files: File[]) {
@@ -73,7 +75,7 @@ export function DropdownCell({
       const uploaded = await Promise.all(files.map((f) => uploadCellFile(rundownId, f)))
       const next = [...attachments, ...uploaded]
       onAttachmentsChange(cueId, columnId, next)
-      await upsertCell(cueId, columnId, value, rundownId, next)
+      await trackSave(upsertCell(cueId, columnId, value, rundownId, next))
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Upload failed')
     } finally {
@@ -84,7 +86,7 @@ export function DropdownCell({
   async function removeAttachment(url: string) {
     const next = attachments.filter((a) => a.url !== url)
     onAttachmentsChange(cueId, columnId, next)
-    await upsertCell(cueId, columnId, value, rundownId, next)
+    await trackSave(upsertCell(cueId, columnId, value, rundownId, next))
   }
 
   function optionList(list: string[], onSelect: (v: string) => void) {

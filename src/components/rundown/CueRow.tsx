@@ -17,6 +17,7 @@ import {
   ScrollText,
   TriangleAlert,
   CheckCircle2,
+  Loader2,
 } from 'lucide-react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -33,6 +34,7 @@ import { InlineTipTap } from './InlineTipTap'
 import { DropdownCell } from './DropdownCell'
 import { PrivateNoteCell } from './PrivateNoteCell'
 import { ScriptDrawer } from './ScriptDrawer'
+import { useRundownData } from './RundownDataContext'
 import {
   CF,
   CUE_COLORS,
@@ -66,6 +68,7 @@ interface CueRowProps {
   onAddAbove: (id: string) => void
   onAddBelow: (id: string) => void
   onDuplicate: (id: string) => void
+  duplicating?: boolean
   onRemoveFromGroup?: (id: string) => void
   onCellChange: (cueId: string, columnId: string, content: string) => void
   onCellAttachmentsChange: (cueId: string, columnId: string, attachments: CellAttachment[]) => void
@@ -118,6 +121,7 @@ export function CueRow({
   onAddAbove,
   onAddBelow,
   onDuplicate,
+  duplicating,
   onRemoveFromGroup,
   onCellChange,
   onCellAttachmentsChange,
@@ -149,6 +153,7 @@ export function CueRow({
   groupNumber,
   focusTitle = false,
 }: CueRowProps) {
+  const { trackSave } = useRundownData()
   const [editingDuration, setEditingDuration] = useState(false)
   const [durationInput, setDurationInput] = useState('')
   const [editingTitle, setEditingTitle] = useState(focusTitle)
@@ -201,36 +206,36 @@ export function CueRow({
     // Editing the duration directly always wins over the script-derived value.
     if (cue.duration_mode === 'auto') updates.duration_mode = 'manual'
     onUpdate(cue.id, updates)
-    await updateCue(cue.id, rundownId, updates)
+    await trackSave(updateCue(cue.id, rundownId, updates))
   }
   function saveTitleHtml(html: string) {
     setEditingTitle(false)
     if (html === cue.title) return
     onUpdate(cue.id, { title: html })
-    updateCue(cue.id, rundownId, { title: html })
+    trackSave(updateCue(cue.id, rundownId, { title: html }))
   }
   function saveSubtitleHtml(html: string) {
     setEditingSubtitle(false)
     const value = !html || html === '<p></p>' ? null : html
     if (value === cue.subtitle) return
     onUpdate(cue.id, { subtitle: value })
-    updateCue(cue.id, rundownId, { subtitle: value })
+    trackSave(updateCue(cue.id, rundownId, { subtitle: value }))
   }
   function handleDelete() { onDelete(cue.id) }
   async function toggleStartType() {
     const newType = cue.start_type === 'soft' ? 'hard' : 'soft'
     const override = newType === 'hard' ? formatMsToTime(cue.calculated_start_ms) : null
     onUpdate(cue.id, { start_type: newType, start_time_override: override })
-    await updateCue(cue.id, rundownId, { start_type: newType, start_time_override: override })
+    await trackSave(updateCue(cue.id, rundownId, { start_type: newType, start_time_override: override }))
   }
   async function setColor(color: string | null) {
     onUpdate(cue.id, { background_color: color })
-    await updateCue(cue.id, rundownId, { background_color: color })
+    await trackSave(updateCue(cue.id, rundownId, { background_color: color }))
   }
   async function toggleNotFinal() {
     const value = !cue.not_final
     onUpdate(cue.id, { not_final: value })
-    await updateCue(cue.id, rundownId, { not_final: value })
+    await trackSave(updateCue(cue.id, rundownId, { not_final: value }))
   }
   function startStartEdit() {
     setStartInput(formatMsToTime(cue.calculated_start_ms))
@@ -243,7 +248,7 @@ export function CueRow({
     const override = formatMsToTime(ms)
     if (override === cue.start_time_override) return
     onUpdate(cue.id, { start_type: 'hard', start_time_override: override })
-    await updateCue(cue.id, rundownId, { start_type: 'hard', start_time_override: override })
+    await trackSave(updateCue(cue.id, rundownId, { start_type: 'hard', start_time_override: override }))
   }
 
   const startTimeLabel = formatMsToTimeDisplay(cue.calculated_start_ms, timeFormat)
@@ -361,8 +366,14 @@ export function CueRow({
               <DropdownMenuItem onClick={() => onAddBelow(cue.id)} className={MI}>
                 <Plus className="w-3.5 h-3.5 text-[#9ba0ab]" /> Add cue below
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onDuplicate(cue.id)} className={MI}>
-                <Copy className="w-3.5 h-3.5 text-[#9ba0ab]" /> Duplicate cue
+              <DropdownMenuItem
+                onClick={duplicating ? undefined : () => onDuplicate(cue.id)}
+                disabled={duplicating}
+                className={cn(MI, duplicating && 'opacity-60 pointer-events-none')}
+              >
+                {duplicating
+                  ? <><Loader2 className="w-3.5 h-3.5 text-[#9ba0ab] animate-spin" /> Duplicating…</>
+                  : <><Copy className="w-3.5 h-3.5 text-[#9ba0ab]" /> Duplicate cue</>}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => onAddScript(cue.id)} data-testid="add-script-menu-item" className={MI}>
                 <ScrollText className="w-3.5 h-3.5 text-[#9ba0ab]" /> Add script

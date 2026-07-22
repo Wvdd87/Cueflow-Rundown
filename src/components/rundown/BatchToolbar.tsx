@@ -10,6 +10,7 @@ import {
   PaintBucket,
   Trash2,
   X,
+  Loader2,
 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -26,6 +27,7 @@ interface BatchToolbarProps {
   canUngroup: boolean
   onSelectAll: () => void
   onDuplicate: () => void
+  duplicating?: boolean
   onGroup: () => void
   onUngroup: () => void
   onMove: (target: 'top' | 'bottom' | number) => void
@@ -42,6 +44,7 @@ export function BatchToolbar({
   canUngroup,
   onSelectAll,
   onDuplicate,
+  duplicating,
   onGroup,
   onUngroup,
   onMove,
@@ -67,8 +70,14 @@ export function BatchToolbar({
       <button data-testid="batch-clear" onClick={onClear} className={ITEM}>
         <X className="w-[11px] h-[11px]" /> Unselect all
       </button>
-      <button data-testid="batch-duplicate" onClick={onDuplicate} className={ITEM}>
-        <Copy className="w-[11px] h-[11px]" /> Duplicate
+      <button
+        data-testid="batch-duplicate"
+        onClick={onDuplicate}
+        disabled={duplicating}
+        className={cn(ITEM, duplicating && 'opacity-60 pointer-events-none')}
+      >
+        {duplicating ? <Loader2 className="w-[11px] h-[11px] animate-spin" /> : <Copy className="w-[11px] h-[11px]" />}
+        {duplicating ? 'Duplicating…' : 'Duplicate'}
       </button>
       <button data-testid="batch-group" onClick={onGroup} className={ITEM}>
         <Group className="w-[11px] h-[11px]" /> Group

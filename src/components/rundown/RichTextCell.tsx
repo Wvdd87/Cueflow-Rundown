@@ -55,7 +55,7 @@ export function RichTextCell({
   initialContent,
   onContentChange,
 }: RichTextCellProps) {
-  const { mentions, variables } = useRundownData()
+  const { mentions, variables, trackSave } = useRundownData()
   const [editing, setEditing] = useState(false)
   const [content, setContent] = useState(initialContent)
 
@@ -78,9 +78,9 @@ export function RichTextCell({
       if (html === content) return
       setContent(html)
       onContentChange(cueId, columnId, html)
-      await upsertCell(cueId, columnId, html, rundownId)
+      await trackSave(upsertCell(cueId, columnId, html, rundownId))
     },
-    [content, cueId, columnId, rundownId, onContentChange]
+    [content, cueId, columnId, rundownId, onContentChange, trackSave]
   )
 
   if (editing) {

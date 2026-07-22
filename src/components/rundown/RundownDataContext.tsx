@@ -11,6 +11,8 @@ export interface RundownSettings {
   cue_number_digits: number
 }
 
+export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
+
 interface RundownDataValue {
   rundownId: string
   mentions: Mention[]
@@ -19,6 +21,9 @@ interface RundownDataValue {
   setVariables: React.Dispatch<React.SetStateAction<Variable[]>>
   rundownSettings: RundownSettings
   onSaveSettings: (s: Partial<RundownSettings>) => void
+  saveStatus: SaveStatus
+  /** Wraps an in-flight save so the toolbar's autosave indicator reflects it. */
+  trackSave: <T>(promise: Promise<T>) => Promise<T>
 }
 
 const RundownDataContext = createContext<RundownDataValue | null>(null)

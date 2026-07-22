@@ -210,6 +210,22 @@ select option {
 .flash-ring {
   animation: flash-ring 1.6s ease-out forwards;
 }
+/* Skeleton loading placeholders (rundown-open, etc.) */
+@keyframes cf-shimmer {
+  0% {
+    background-position: -200px 0;
+  }
+  100% {
+    background-position: calc(200px + 100%) 0;
+  }
+}
+.cf-skeleton {
+  background-color: #16161c;
+  background-image: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.05), transparent);
+  background-size: 200px 100%;
+  background-repeat: no-repeat;
+  animation: cf-shimmer 1.5s ease-in-out infinite;
+}
 
 /* Rich-text (TipTap) cell content — restore list/mark styling stripped by reset */
 .tiptap-cell h1 {
