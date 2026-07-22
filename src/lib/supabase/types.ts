@@ -383,6 +383,38 @@ export type Database = {
           visible_columns?: string[] | null
         }
       }
+      collaboration_links: {
+        Row: {
+          id: string
+          rundown_id: string
+          label: string
+          editable_columns: string[]
+          can_add_delete_cues: boolean
+          can_add_delete_columns: boolean
+          can_run_show: boolean
+          active: boolean
+          created_at: string
+        }
+        Insert: {
+          id: string
+          rundown_id: string
+          label: string
+          editable_columns?: string[]
+          can_add_delete_cues?: boolean
+          can_add_delete_columns?: boolean
+          can_run_show?: boolean
+          active?: boolean
+          created_at?: string
+        }
+        Update: {
+          label?: string
+          editable_columns?: string[]
+          can_add_delete_cues?: boolean
+          can_add_delete_columns?: boolean
+          can_run_show?: boolean
+          active?: boolean
+        }
+      }
     }
     Views: Record<string, unknown>
     Functions: Record<string, unknown>
@@ -401,3 +433,4 @@ export type Mention = Database['public']['Tables']['mentions']['Row']
 export type Variable = Database['public']['Tables']['variables']['Row']
 export type PrivateNote = Database['public']['Tables']['private_notes']['Row']
 export type RundownShare = Database['public']['Tables']['rundown_shares']['Row']
+export type CollaborationLink = Database['public']['Tables']['collaboration_links']['Row']

@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/dialog'
 import { FIELD, BTN_PRIMARY } from './dialogStyles'
 import { listShares, createShare, updateShare, revokeShare } from '@/app/actions/shares'
+import { CollabLinksSection } from './CollabLinksSection'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import type { Column, RundownShare } from '@/lib/supabase/types'
@@ -194,6 +195,8 @@ export function ShareDialog({ rundownId, columns, open, onOpenChange }: ShareDia
               {creating ? 'Generating link…' : 'Create link'}
             </button>
           </div>
+
+          <CollabLinksSection rundownId={rundownId} columns={columns} open={open} />
         </div>
       </DialogContent>
     </Dialog>
