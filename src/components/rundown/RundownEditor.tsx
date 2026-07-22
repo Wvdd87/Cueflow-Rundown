@@ -50,7 +50,6 @@ import { MentionsVariablesDialog } from './MentionsVariablesDialog'
 import { RundownTrashDialog } from './RundownTrashDialog'
 import { RundownSearch } from './RundownSearch'
 import type { SearchCue } from './RundownSearch'
-import { CueFilterBar } from './CueFilterBar'
 import { FinalizeWarningDialog, type NotFinalCueRef } from './FinalizeWarningDialog'
 import { emptyFilters, hasActiveFilters, computeCueVisibility, type CueFilterState } from './cueFilters'
 import { RundownDataProvider } from './RundownDataContext'
@@ -1166,6 +1165,10 @@ export function RundownEditor({
           onSearchSelect={handleSearchSelect}
           status={rundownStatus}
           onChangeStatus={handleChangeStatus}
+          cues={cues}
+          cells={cells}
+          filters={filters}
+          onFiltersChange={setFilters}
           canUndo={history.canUndo}
           canRedo={history.canRedo}
           undoLabel={history.undoLabel}
@@ -1193,8 +1196,6 @@ export function RundownEditor({
         />
 
         {live.isLive && <TransportBar live={live} cues={liveCues} />}
-
-        <CueFilterBar columns={columns} cues={cues} cells={cells} filters={filters} onChange={setFilters} />
 
         {/* flex-1 wrapper is relative so BatchToolbar can float above content without pushing rows */}
         <div className="flex-1 overflow-hidden relative">

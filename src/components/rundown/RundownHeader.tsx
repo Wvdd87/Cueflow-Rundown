@@ -28,6 +28,8 @@ import {
 import { ShareDialog } from './ShareDialog'
 import { RundownSearch } from './RundownSearch'
 import type { SearchCue } from './RundownSearch'
+import { CueFilterButton, CueFilterChipsRow } from './CueFilterBar'
+import { hasActiveFilters, type CueFilterState } from './cueFilters'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,7 +43,7 @@ import {
   RUNDOWN_STATUSES,
   type RundownStatus,
 } from '@/lib/rundownStatus'
-import type { Rundown, Column } from '@/lib/supabase/types'
+import type { Rundown, Column, Cue } from '@/lib/supabase/types'
 
 interface RundownHeaderProps {
   rundown: Rundown
@@ -62,6 +64,10 @@ interface RundownHeaderProps {
   onSearchSelect: (id: string) => void
   status: RundownStatus
   onChangeStatus: (next: RundownStatus) => void
+  cues: Cue[]
+  cells: Record<string, string>
+  filters: CueFilterState
+  onFiltersChange: (next: CueFilterState) => void
 }
 
 const STATUS_DESC: Record<RundownStatus, string> = {
@@ -95,6 +101,10 @@ export function RundownHeader({
   onSearchSelect,
   status,
   onChangeStatus,
+  cues,
+  cells,
+  filters,
+  onFiltersChange,
 }: RundownHeaderProps) {
   const [name, setName] = useState(rundown.name)
   const [editing, setEditing] = useState(false)
@@ -133,7 +143,8 @@ export function RundownHeader({
   const cf = STATUS_CONFIG[status].cf
 
   return (
-    <header className="flex items-center gap-3 px-5 h-14 border-b border-[#1d1d24] bg-[#07070a] shrink-0">
+    <header className="flex flex-col border-b border-[#1d1d24] bg-[#07070a] shrink-0">
+    <div className="flex items-center gap-3 px-5 h-14">
       {/* Logo / back-to-dashboard */}
       <Link
         href="/dashboard"
@@ -212,6 +223,8 @@ export function RundownHeader({
       </DropdownMenu>
 
       <div className="flex-1" />
+
+      <CueFilterButton columns={columns} cues={cues} cells={cells} filters={filters} onChange={onFiltersChange} />
 
       <RundownSearch cues={searchCues} onSelect={onSearchSelect} />
 
@@ -324,6 +337,16 @@ export function RundownHeader({
         open={shareOpen}
         onOpenChange={setShareOpen}
       />
+    </div>
+
+    {hasActiveFilters(filters) && (
+      <CueFilterChipsRow
+        columns={columns}
+        filters={filters}
+        onChange={onFiltersChange}
+        className="px-5 py-2 border-t border-[#1d1d24]"
+      />
+    )}
     </header>
   )
 }

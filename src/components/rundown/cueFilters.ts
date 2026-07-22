@@ -55,8 +55,9 @@ export function cueMatchesFilters(
 ): boolean {
   const kind = cueKind(cue)
   if (filters.cueTypes.size > 0 && !filters.cueTypes.has(kind)) return false
-  if (kind === 'heading') return true
 
+  // Headings otherwise go through the same checks as leaf cues (title/color/etc.)
+  // — a heading that doesn't fit the active filters gets hidden like anything else.
   if (filters.notFinalOnly && !cue.not_final) return false
 
   if (filters.durationMinMs != null && cue.duration_ms < filters.durationMinMs) return false
@@ -91,10 +92,10 @@ export interface CueVisibility {
 /**
  * Decide which rows render while filters are active — matches every cue
  * independently, then applies two distinct visibility rules: a group header
- * shows if ≥1 of its children match (regardless of the "Cue type" filter —
- * it's structural chrome for children that already matched, not itself being
- * filtered); a *standalone* heading divider always shows unless the "Cue
- * type" filter explicitly excludes headings.
+ * shows if ≥1 of its children match (it's structural chrome for children that
+ * already matched, not itself being filtered); a *standalone* heading divider
+ * is matched against the filters just like a leaf cue (title/color/cue-type/…)
+ * — it does not get a blanket pass just for being a heading.
  */
 export function computeCueVisibility(
   layout: CueLayout,
@@ -103,12 +104,11 @@ export function computeCueVisibility(
 ): CueVisibility {
   const cueIds = new Set<string>()
   const headingIds = new Set<string>()
-  const standaloneHeadingIncluded = filters.cueTypes.size === 0 || filters.cueTypes.has('heading')
 
   for (const item of layout.items) {
     if (item.type === 'group') {
       if (item.children.length === 0) {
-        if (standaloneHeadingIncluded) headingIds.add(item.heading.id)
+        if (cueMatchesFilters(item.heading, filters, cells)) headingIds.add(item.heading.id)
         continue
       }
       let anyChildMatched = false
