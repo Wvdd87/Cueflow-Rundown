@@ -1315,6 +1315,120 @@ export function RundownEditor({
     flashCell(cueId, colId)
   }, [renderableIds, columns, handleUpdateCue, handleCellChange, handlePrivateNoteChange, actions, trackSave, flashCell])
 
+  // Canonical leaf-cue column order (mirrors useGridNavigation.columnAxis) —
+  // the axis copy/paste rectangles operate on.
+  const columnAxis = useMemo(() => {
+    const left = visibleColumns.slice(0, titleIndex).map((c) => c.id)
+    const rightCols = visibleColumns.slice(titleIndex)
+    const pnInRight = Math.max(0, privateNotesIndex - titleIndex)
+    const insertAt = Math.min(Math.max(0, pnInRight), rightCols.length)
+    const rightIds = rightCols.map((c) => c.id)
+    rightIds.splice(insertAt, 0, PRIVATE_NOTES_ID)
+    return ['start', 'dur', ...left, 'title', ...rightIds]
+  }, [visibleColumns, titleIndex, privateNotesIndex])
+
+  // Plaintext of a cell for copying to the clipboard.
+  const cellPlain = useCallback((cueId: string, colId: string): string => {
+    const cue = cuesRef.current.find((c) => c.id === cueId)
+    if (!cue) return ''
+    if (colId === 'title') return stripHtml(cue.title ?? '')
+    if (colId === 'dur') return formatDuration(cue.duration_ms)
+    if (colId === 'start') return ''
+    if (colId === PRIVATE_NOTES_ID) return stripHtml(privateNotesRef.current[cueId] ?? '')
+    const col = columns.find((c) => c.id === colId)
+    const raw = cellsRef.current[`${cueId}:${colId}`] ?? ''
+    return col?.col_type === 'dropdown' ? parseDropdownCellValues(raw).join(', ') : stripHtml(raw)
+  }, [columns])
+
+  // Copy (#71.7): write the selection to the system clipboard as TSV so it also
+  // pastes into external tools (Excel / Sheets).
+  const handleCopyCells = useCallback((cells: { cueId: string; colId: string }[]) => {
+    if (cells.length === 0) return
+    const rowIds = [...new Set(cells.map((c) => c.cueId))].sort((a, b) => renderableIds.indexOf(a) - renderableIds.indexOf(b))
+    const colIds = columnAxis.filter((c) => cells.some((x) => x.colId === c))
+    const byKey = new Set(cells.map((c) => `${c.cueId}:${c.colId}`))
+    const tsv = rowIds
+      .map((rid) => colIds.map((cid) => (byKey.has(`${rid}:${cid}`) ? cellPlain(rid, cid).replace(/\t|\n/g, ' ') : '')).join('\t'))
+      .join('\n')
+    navigator.clipboard?.writeText(tsv).catch(() => {})
+    toast.success(`Copied ${cells.length} cell${cells.length > 1 ? 's' : ''}`)
+  }, [renderableIds, columnAxis, cellPlain])
+
+  // Paste (#71.7): fill a TSV block right/down from the target cell. Timing
+  // columns and heading rows are skipped; overflow past the last column/row is
+  // clipped. One undoable history entry.
+  const handlePasteCells = useCallback(async (target: { cueId: string; colId: string }) => {
+    let text = ''
+    try { text = await navigator.clipboard.readText() } catch { return }
+    if (!text) return
+    const rows = text.replace(/\r/g, '').split('\n')
+    while (rows.length > 1 && rows[rows.length - 1] === '') rows.pop()
+    const grid = rows.map((r) => r.split('\t'))
+    const startCol = columnAxis.indexOf(target.colId)
+    if (startCol < 0) return
+
+    const escHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    const toHtml = (s: string) => (s.trim() ? `<p>${escHtml(s)}</p>` : '')
+    const before: { kind: 'title' | 'note' | 'cell'; cueId: string; colId?: string; val: string }[] = []
+    const writes: Promise<unknown>[] = []
+    let filled = 0
+
+    const writeCell = (cueId: string, colId: string, plain: string) => {
+      if (colId === 'start' || colId === 'dur') return
+      if (colId === 'title') {
+        const cue = cuesRef.current.find((c) => c.id === cueId)!
+        before.push({ kind: 'title', cueId, val: cue.title ?? '' })
+        handleUpdateCue(cueId, { title: toHtml(plain) })
+        writes.push(trackSave(actions.updateCue(cueId, { title: toHtml(plain) })))
+      } else if (colId === PRIVATE_NOTES_ID) {
+        before.push({ kind: 'note', cueId, val: privateNotesRef.current[cueId] ?? '' })
+        handlePrivateNoteChange(cueId, toHtml(plain))
+        actions.upsertPrivateNote(cueId, toHtml(plain))
+      } else {
+        const col = columns.find((c) => c.id === colId)
+        if (!col) return
+        const stored = col.col_type === 'dropdown'
+          ? JSON.stringify(plain.split(',').map((s) => s.trim()).filter(Boolean))
+          : toHtml(plain)
+        before.push({ kind: 'cell', cueId, colId, val: cellsRef.current[`${cueId}:${colId}`] ?? '' })
+        handleCellChange(cueId, colId, stored)
+        writes.push(trackSave(actions.upsertCell(cueId, colId, stored)))
+      }
+      filled++
+    }
+
+    let rowIdx = renderableIds.indexOf(target.cueId)
+    if (rowIdx < 0) return
+    for (const gridRow of grid) {
+      // advance to the next existing leaf row (skip heading rows)
+      let cue: Cue | undefined
+      while (rowIdx < renderableIds.length) {
+        const c = cuesRef.current.find((x) => x.id === renderableIds[rowIdx])
+        if (c && c.cue_type !== 'heading') { cue = c; break }
+        rowIdx++
+      }
+      if (!cue) break // clip past the last row
+      for (let gc = 0; gc < gridRow.length; gc++) {
+        const colIdx = startCol + gc
+        if (colIdx >= columnAxis.length) break // clip past the last column
+        writeCell(cue.id, columnAxis[colIdx], gridRow[gc])
+      }
+      rowIdx++
+    }
+
+    if (filled === 0) return
+    await Promise.all(writes)
+    const restore = async () => {
+      for (const b of before) {
+        if (b.kind === 'title') { handleUpdateCue(b.cueId, { title: b.val }); await actions.updateCue(b.cueId, { title: b.val }) }
+        else if (b.kind === 'note') { handlePrivateNoteChange(b.cueId, b.val); await actions.upsertPrivateNote(b.cueId, b.val) }
+        else { handleCellChange(b.cueId, b.colId!, b.val); await actions.upsertCell(b.cueId, b.colId!, b.val) }
+      }
+    }
+    history.push({ label: `Paste ${filled} cells`, undo: restore, redo: async () => { await handlePasteCells(target) } })
+    undoToast(`Pasted ${filled} cell${filled > 1 ? 's' : ''}`)
+  }, [renderableIds, columnAxis, columns, actions, trackSave, history, undoToast, handleUpdateCue, handleCellChange, handlePrivateNoteChange])
+
   const gridNav = useGridNavigation({
     cues,
     visibleColumns,
@@ -1326,7 +1440,22 @@ export function RundownEditor({
     onAddCueBelow: (id) => handleAddCueAt(id, 'below'),
     onAddCueAtEnd: handleAddCue,
     onRepeatLastValue: handleRepeatLastValue,
+    onCopyCells: handleCopyCells,
+    onPasteCells: handlePasteCells,
   })
+
+  // Imperatively highlight the rectangular cell selection (avoids threading the
+  // range through every CueRow). Reapplied whenever the selection changes.
+  useEffect(() => {
+    const sel = gridNav.selectedCells
+    if (sel.length <= 1) return
+    const els: HTMLElement[] = []
+    for (const { cueId, colId } of sel) {
+      const el = document.querySelector(`[data-row-id="${CSS.escape(cueId)}"][data-col-id="${CSS.escape(colId)}"]`) as HTMLElement | null
+      if (el) { el.classList.add('cf-cell-selected'); els.push(el) }
+    }
+    return () => { for (const el of els) el.classList.remove('cf-cell-selected') }
+  }, [gridNav.selectedCells])
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
 
   // --- Find & replace (#71.4) — operates on the plaintext of cue titles and

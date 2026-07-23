@@ -104,7 +104,7 @@ interface CueRowProps {
   selectTitleOnFocus?: boolean
   /** Which column of this row currently has keyboard grid focus (null = none). */
   focusedColId?: string | null
-  onCellFocus?: (cueId: string, colId: string) => void
+  onCellFocus?: (cueId: string, colId: string, extend?: boolean) => void
   /** Debounced conditional-rules result for this row (#65) — background/text
    *  color already resolved against the manual color, plus a not-final flag. */
   ruleResult?: RuleRowResult
@@ -296,7 +296,7 @@ export function CueRow({
       onClick={(e) => e.stopPropagation()}
       onClickCapture={(e) => {
         const colId = (e.target as HTMLElement).closest('[data-col-id]')?.getAttribute('data-col-id')
-        if (colId) onCellFocus?.(cue.id, colId)
+        if (colId) onCellFocus?.(cue.id, colId, e.shiftKey)
       }}
     >
       {/* Parent group — shown above the current-cue indicator so a sub-cue's

@@ -18,6 +18,8 @@ const GROUPS: ShortcutGroup[] = [
       ['Escape', 'Clear focus'],
       ['⌘/Ctrl + Enter', 'Add a cue below the focused row'],
       ['⌘/Ctrl + D', 'Repeat the value from the cell above'],
+      ['Shift + Arrows / Click', 'Extend the cell selection'],
+      ['⌘/Ctrl + C / V', 'Copy / paste the selected cells'],
     ],
   },
   {

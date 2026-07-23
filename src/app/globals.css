@@ -224,6 +224,11 @@ select option {
 .cf-cell-flash {
   animation: cf-cell-flash 0.65s ease-out;
 }
+/* Rectangular cell selection for copy/paste (#71.7) */
+.cf-cell-selected {
+  box-shadow: inset 0 0 0 1px rgba(240, 168, 56, 0.55);
+  background-color: rgba(240, 168, 56, 0.08);
+}
 /* Skeleton loading placeholders (rundown-open, etc.) */
 @keyframes cf-shimmer {
   0% {

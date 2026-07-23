@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { PRIVATE_NOTES_ID } from './layout'
 import type { Cue, Column } from '@/lib/supabase/types'
 
@@ -24,6 +24,10 @@ interface UseGridNavigationArgs {
   onAddCueAtEnd: () => void
   /** Ctrl/Cmd+D in focus mode: repeat the same column's value from the row above. */
   onRepeatLastValue?: (target: FocusedCell) => void
+  /** Ctrl/Cmd+C in focus mode: copy the current rectangular cell selection. */
+  onCopyCells?: (cells: FocusedCell[]) => void
+  /** Ctrl/Cmd+V in focus mode: paste into the block anchored at the focused cell. */
+  onPasteCells?: (target: FocusedCell) => void
 }
 
 const cellSelector = (cueId: string, colId: string) =>
@@ -43,8 +47,12 @@ export function useGridNavigation({
   onAddCueBelow,
   onAddCueAtEnd,
   onRepeatLastValue,
+  onCopyCells,
+  onPasteCells,
 }: UseGridNavigationArgs) {
   const [focusedCell, setFocusedCell] = useState<FocusedCell | null>(null)
+  // Anchor of a rectangular cell selection (null = just the focused cell).
+  const [selectionAnchor, setSelectionAnchor] = useState<FocusedCell | null>(null)
 
   const cuesRef = useRef(cues)
   cuesRef.current = cues
@@ -65,6 +73,58 @@ export function useGridNavigation({
     return ['start', 'dur', ...left, 'title', ...rightIds]
   }, [])
 
+  // Canonical column order for a leaf cue — the axis rectangular selection and
+  // paste operate on (headings expose only 'title' and are handled per-row).
+  const columnAxis = useMemo(
+    () => getRowColumns({ cue_type: 'cue' } as Cue),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [getRowColumns, visibleColumns, titleIndex, privateNotesIndex]
+  )
+
+  const selectedCells = useMemo<FocusedCell[]>(() => {
+    if (!focusedCell) return []
+    if (!selectionAnchor) return [focusedCell]
+    const r1 = renderableIds.indexOf(selectionAnchor.cueId)
+    const r2 = renderableIds.indexOf(focusedCell.cueId)
+    const c1 = columnAxis.indexOf(selectionAnchor.colId)
+    const c2 = columnAxis.indexOf(focusedCell.colId)
+    if (r1 < 0 || r2 < 0 || c1 < 0 || c2 < 0) return [focusedCell]
+    const rlo = Math.min(r1, r2), rhi = Math.max(r1, r2)
+    const clo = Math.min(c1, c2), chi = Math.max(c1, c2)
+    const out: FocusedCell[] = []
+    for (let r = rlo; r <= rhi; r++) {
+      const cue = cuesRef.current.find((c) => c.id === renderableIds[r])
+      if (!cue) continue
+      const rowCols = getRowColumns(cue)
+      for (let c = clo; c <= chi; c++) {
+        if (rowCols.includes(columnAxis[c])) out.push({ cueId: renderableIds[r], colId: columnAxis[c] })
+      }
+    }
+    return out
+  }, [focusedCell, selectionAnchor, renderableIds, columnAxis, getRowColumns])
+
+  const selectedCellsRef = useRef(selectedCells)
+  selectedCellsRef.current = selectedCells
+
+  // Extend the rectangular selection by one cell (Shift+Arrow); anchors on the
+  // current focused cell the first time, then moves the head without wrapping.
+  const extendSelection = useCallback((dRow: number, dCol: number) => {
+    setSelectionAnchor((a) => a ?? focusedCell)
+    setFocusedCell((cur) => {
+      if (!cur) return cur
+      const ids = renderableIdsRef.current
+      const r = ids.indexOf(cur.cueId)
+      const c = columnAxis.indexOf(cur.colId)
+      if (r < 0 || c < 0) return cur
+      const nr = Math.min(Math.max(0, r + dRow), ids.length - 1)
+      const nc = Math.min(Math.max(0, c + dCol), columnAxis.length - 1)
+      const cue = cuesRef.current.find((x) => x.id === ids[nr])
+      if (!cue) return cur
+      const rowCols = getRowColumns(cue)
+      return { cueId: ids[nr], colId: rowCols.includes(columnAxis[nc]) ? columnAxis[nc] : 'title' }
+    })
+  }, [focusedCell, columnAxis, getRowColumns])
+
   const expandIfCollapsedHeading = useCallback((cue: Cue) => {
     if (cue.cue_type === 'heading' && collapsedGroups.has(cue.id)) {
       setCollapsedGroups((prev) => {
@@ -75,11 +135,13 @@ export function useGridNavigation({
     }
   }, [collapsedGroups, setCollapsedGroups])
 
-  const focusCell = useCallback((cueId: string, colId: string) => {
+  const focusCell = useCallback((cueId: string, colId: string, extend = false) => {
+    if (extend) setSelectionAnchor((a) => a ?? focusedCell)
+    else setSelectionAnchor(null)
     setFocusedCell({ cueId, colId })
-  }, [])
+  }, [focusedCell])
 
-  const clearFocus = useCallback(() => setFocusedCell(null), [])
+  const clearFocus = useCallback(() => { setSelectionAnchor(null); setFocusedCell(null) }, [])
 
   const moveHorizontal = useCallback((delta: 1 | -1) => {
     setFocusedCell((current) => {
@@ -188,15 +250,36 @@ export function useGridNavigation({
           onRepeatLastValue?.(focusedCell)
           return
         }
+        if ((e.key === 'c' || e.key === 'C') && (e.metaKey || e.ctrlKey) && focusedCell) {
+          // Don't hijack a real text selection the user is trying to copy.
+          if ((window.getSelection()?.toString() ?? '') !== '') return
+          e.preventDefault()
+          onCopyCells?.(selectedCellsRef.current)
+          return
+        }
+        if ((e.key === 'v' || e.key === 'V') && (e.metaKey || e.ctrlKey) && focusedCell) {
+          e.preventDefault()
+          onPasteCells?.(focusedCell)
+          return
+        }
+        // Shift+Arrow extends the rectangular selection.
+        if (e.shiftKey && focusedCell && (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+          e.preventDefault()
+          extendSelection(
+            e.key === 'ArrowDown' ? 1 : e.key === 'ArrowUp' ? -1 : 0,
+            e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0
+          )
+          return
+        }
         switch (e.key) {
           case 'ArrowUp':
-            e.preventDefault(); moveVertical(-1); return
+            e.preventDefault(); setSelectionAnchor(null); moveVertical(-1); return
           case 'ArrowDown':
-            e.preventDefault(); moveVertical(1); return
+            e.preventDefault(); setSelectionAnchor(null); moveVertical(1); return
           case 'ArrowLeft':
-            e.preventDefault(); moveHorizontal(-1); return
+            e.preventDefault(); setSelectionAnchor(null); moveHorizontal(-1); return
           case 'ArrowRight':
-            e.preventDefault(); moveHorizontal(1); return
+            e.preventDefault(); setSelectionAnchor(null); moveHorizontal(1); return
           case 'Tab':
             if (!focusedCell) return
             e.preventDefault(); moveHorizontal(e.shiftKey ? -1 : 1); return
@@ -241,6 +324,9 @@ export function useGridNavigation({
     onAddCueBelow,
     onAddCueAtEnd,
     onRepeatLastValue,
+    onCopyCells,
+    onPasteCells,
+    extendSelection,
   ])
 
   // Keep the focused cell scrolled into view.
@@ -250,5 +336,5 @@ export function useGridNavigation({
     el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
   }, [focusedCell])
 
-  return { focusedCell, focusCell, clearFocus, getRowColumns }
+  return { focusedCell, focusCell, clearFocus, getRowColumns, selectedCells, columnAxis }
 }
