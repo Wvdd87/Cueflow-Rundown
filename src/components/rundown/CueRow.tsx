@@ -99,6 +99,9 @@ interface CueRowProps {
   groupTitle?: string
   groupNumber?: string
   focusTitle?: boolean
+  /** When entering title edit via focusTitle, select the existing text (used by
+   *  duplicate-with-edits so the copied title can be typed over — #71.2). */
+  selectTitleOnFocus?: boolean
   /** Which column of this row currently has keyboard grid focus (null = none). */
   focusedColId?: string | null
   onCellFocus?: (cueId: string, colId: string) => void
@@ -158,6 +161,7 @@ export function CueRow({
   groupTitle,
   groupNumber,
   focusTitle = false,
+  selectTitleOnFocus = false,
   focusedColId = null,
   onCellFocus,
   ruleResult,
@@ -657,6 +661,7 @@ export function CueRow({
             <InlineTipTap
               initialContent={cue.title}
               onSave={saveTitleHtml}
+              selectAllOnFocus={selectTitleOnFocus}
               editorClassName="tiptap-cell focus:outline-none w-full text-[15px] font-medium border-b border-[#f0a838]"
               className="w-full"
             />

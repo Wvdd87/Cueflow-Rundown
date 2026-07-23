@@ -14,6 +14,9 @@ interface InlineTipTapProps {
   className?: string
   onSave: (html: string) => void
   editorClassName?: string
+  /** Select all existing content on focus (used when duplicating a cue so the
+   *  pre-filled title can be typed over or extended — see #71.2). */
+  selectAllOnFocus?: boolean
 }
 
 export function InlineTipTap({
@@ -22,6 +25,7 @@ export function InlineTipTap({
   className,
   onSave,
   editorClassName,
+  selectAllOnFocus = false,
 }: InlineTipTapProps) {
   const wrapperRef = useRef<HTMLDivElement>(null)
   const savedRef = useRef(false)
@@ -46,7 +50,7 @@ export function InlineTipTap({
       Highlight.configure({ multicolor: true }),
     ],
     content: initialContent || '',
-    autofocus: 'end',
+    autofocus: selectAllOnFocus ? 'all' : 'end',
     editorProps: {
       attributes: {
         class: editorClassName ?? 'tiptap-cell focus:outline-none w-full',

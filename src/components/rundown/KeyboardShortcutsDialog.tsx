@@ -17,6 +17,7 @@ const GROUPS: ShortcutGroup[] = [
       ['Enter / Space', 'Start editing the focused cell'],
       ['Escape', 'Clear focus'],
       ['⌘/Ctrl + Enter', 'Add a cue below the focused row'],
+      ['⌘/Ctrl + D', 'Repeat the value from the cell above'],
     ],
   },
   {

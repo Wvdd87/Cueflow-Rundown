@@ -210,6 +210,20 @@ select option {
 .flash-ring {
   animation: flash-ring 1.6s ease-out forwards;
 }
+/* Brief confirm flash on a cell (repeat-last-value / paste — #71) */
+@keyframes cf-cell-flash {
+  0% {
+    box-shadow: inset 0 0 0 2px rgba(240, 168, 56, 0.9);
+    background-color: rgba(240, 168, 56, 0.18);
+  }
+  100% {
+    box-shadow: inset 0 0 0 2px rgba(240, 168, 56, 0);
+    background-color: transparent;
+  }
+}
+.cf-cell-flash {
+  animation: cf-cell-flash 0.65s ease-out;
+}
 /* Skeleton loading placeholders (rundown-open, etc.) */
 @keyframes cf-shimmer {
   0% {

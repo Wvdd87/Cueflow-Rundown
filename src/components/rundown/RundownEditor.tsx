@@ -48,7 +48,8 @@ import { useSaveStatus } from './useSaveStatus'
 import { useGridNavigation } from './useGridNavigation'
 import { KeyboardShortcutsDialog } from './KeyboardShortcutsDialog'
 import { buildCueLayout, formatCueNumber } from './cueTree'
-import { CF, totalRowWidth } from './layout'
+import { CF, totalRowWidth, PRIVATE_NOTES_ID } from './layout'
+import { parseDropdownCellValues } from '@/lib/dropdownValues'
 import { useLiveShow } from './useLiveShow'
 import { useBroadcastLive, useLeaderState, useLiveSubscription, usePresence, colorForIdentity } from './liveSync'
 import {
@@ -202,11 +203,18 @@ export function RundownEditor({
   const [titleWidth, setTitleWidth] = useState<number>(240)
   const [privateNotesWidth, setPrivateNotesWidth] = useState<number>(210)
   const [focusCueId, setFocusCueId] = useState<string | null>(null)
+  // When true, the focused cue's title enters edit mode with all text selected
+  // (duplicate-with-edits, #71.2) rather than an empty cursor-at-end.
+  const [focusSelectAll, setFocusSelectAll] = useState(false)
   const [focusScriptId, setFocusScriptId] = useState<string | null>(null)
   const [hydrated, setHydrated] = useState(false)
   const lastSelectedRef = useRef<string | null>(null)
   const cuesRef = useRef(cues)
   cuesRef.current = cues
+  const cellsRef = useRef(cells)
+  cellsRef.current = cells
+  const privateNotesRef = useRef(privateNotes)
+  privateNotesRef.current = privateNotes
   // Prevents double-submit when add buttons are clicked rapidly
   const addingRef = useRef(false)
   // A newly-added cue is first rendered with a temporary client-side id, then
@@ -930,10 +938,18 @@ export function RundownEditor({
       const r = await actions.duplicateCues([id])
       if (r.error) { toast.error(r.error); return }
       await refreshCues()
+      // Drop into the new row's title with the copied text selected, so the
+      // user can immediately type over it or extend it (#71.2). The collab RPC
+      // doesn't return the new id, so this is an owner-side nicety.
+      const newId = r.newIds?.[id]
+      if (newId) {
+        setFocusSelectAll(true)
+        setFocusCueId(newId)
+      }
     } finally {
       setDuplicatingIds((prev) => { const n = new Set(prev); n.delete(id); return n })
     }
-  }, [rundown.id, refreshCues])
+  }, [actions, refreshCues])
 
   // --- Single-cue handlers (passed to rows) ---
   const handleDeleteCue = useCallback((id: string) => {
@@ -1155,6 +1171,64 @@ export function RundownEditor({
     [visibleOrderIds, visibility]
   )
 
+  // Brief confirm flash on a grid cell after an imperative fill (repeat value /
+  // paste). Applied after a frame so the value's own re-render doesn't wipe it.
+  const flashCell = useCallback((cueId: string, colId: string) => {
+    requestAnimationFrame(() => {
+      const el = document.querySelector(
+        `[data-row-id="${CSS.escape(cueId)}"][data-col-id="${CSS.escape(colId)}"]`
+      ) as HTMLElement | null
+      if (!el) return
+      el.classList.remove('cf-cell-flash')
+      void el.offsetWidth // restart the animation if already flashing
+      el.classList.add('cf-cell-flash')
+      window.setTimeout(() => el.classList.remove('cf-cell-flash'), 700)
+    })
+  }, [])
+
+  // Repeat-last-value (#71.5): Ctrl/Cmd+D in focus mode copies the same column's
+  // value from the row immediately above into the (empty) focused cell. Timing
+  // columns are excluded, and a non-empty cell is never overwritten.
+  const handleRepeatLastValue = useCallback((target: { cueId: string; colId: string }) => {
+    const { cueId, colId } = target
+    if (colId === 'start' || colId === 'dur') return
+    const idx = renderableIds.indexOf(cueId)
+    if (idx <= 0) return
+    const prevId = renderableIds[idx - 1]
+    const emptyText = (s: string) => stripHtml(s ?? '').trim() === ''
+
+    if (colId === 'title') {
+      const cur = cuesRef.current.find((c) => c.id === cueId)
+      const prev = cuesRef.current.find((c) => c.id === prevId)
+      if (!cur || !prev || !emptyText(cur.title) || emptyText(prev.title)) return
+      handleUpdateCue(cueId, { title: prev.title })
+      trackSave(actions.updateCue(cueId, { title: prev.title }))
+      flashCell(cueId, colId)
+      return
+    }
+
+    if (colId === PRIVATE_NOTES_ID) {
+      const cur = privateNotesRef.current[cueId] ?? ''
+      const prev = privateNotesRef.current[prevId] ?? ''
+      if (!emptyText(cur) || emptyText(prev)) return
+      handlePrivateNoteChange(cueId, prev)
+      actions.upsertPrivateNote(cueId, prev)
+      flashCell(cueId, colId)
+      return
+    }
+
+    const col = columns.find((c) => c.id === colId)
+    if (!col) return
+    const curRaw = cellsRef.current[`${cueId}:${colId}`] ?? ''
+    const prevRaw = cellsRef.current[`${prevId}:${colId}`] ?? ''
+    const isEmpty = (raw: string) =>
+      col.col_type === 'dropdown' ? parseDropdownCellValues(raw).length === 0 : emptyText(raw)
+    if (!isEmpty(curRaw) || isEmpty(prevRaw)) return
+    handleCellChange(cueId, colId, prevRaw)
+    trackSave(actions.upsertCell(cueId, colId, prevRaw))
+    flashCell(cueId, colId)
+  }, [renderableIds, columns, handleUpdateCue, handleCellChange, handlePrivateNoteChange, actions, trackSave, flashCell])
+
   const gridNav = useGridNavigation({
     cues,
     visibleColumns,
@@ -1165,6 +1239,7 @@ export function RundownEditor({
     setCollapsedGroups,
     onAddCueBelow: (id) => handleAddCueAt(id, 'below'),
     onAddCueAtEnd: handleAddCue,
+    onRepeatLastValue: handleRepeatLastValue,
   })
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
 
@@ -1326,6 +1401,7 @@ export function RundownEditor({
         groupNumber={groupDisplayNumber}
         privateNotesWidth={privateNotesWidth}
         focusTitle={cue.id === focusCueId}
+        selectTitleOnFocus={focusSelectAll && cue.id === focusCueId}
         ruleResult={ruleResults.get(cue.id)}
       />
     )

@@ -312,7 +312,7 @@ export async function duplicateCues(rundownId: string, ids: string[]) {
     )
 
   revalidatePath(`/rundown/${rundownId}`)
-  return { success: true }
+  return { success: true, newIds: Object.fromEntries(idMap) as Record<string, string> }
 }
 
 /** Wrap the selected cues in a new "New group" heading. */

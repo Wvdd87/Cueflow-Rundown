@@ -22,6 +22,8 @@ interface UseGridNavigationArgs {
   onAddCueBelow: (cueId: string) => void
   /** Adds a cue at the very end of the rundown (used when Shift+Enter falls off the last row). */
   onAddCueAtEnd: () => void
+  /** Ctrl/Cmd+D in focus mode: repeat the same column's value from the row above. */
+  onRepeatLastValue?: (target: FocusedCell) => void
 }
 
 const cellSelector = (cueId: string, colId: string) =>
@@ -40,6 +42,7 @@ export function useGridNavigation({
   setCollapsedGroups,
   onAddCueBelow,
   onAddCueAtEnd,
+  onRepeatLastValue,
 }: UseGridNavigationArgs) {
   const [focusedCell, setFocusedCell] = useState<FocusedCell | null>(null)
 
@@ -180,6 +183,11 @@ export function useGridNavigation({
           onAddCueBelow(focusedCell.cueId)
           return
         }
+        if ((e.key === 'd' || e.key === 'D') && (e.metaKey || e.ctrlKey) && focusedCell) {
+          e.preventDefault()
+          onRepeatLastValue?.(focusedCell)
+          return
+        }
         switch (e.key) {
           case 'ArrowUp':
             e.preventDefault(); moveVertical(-1); return
@@ -232,6 +240,7 @@ export function useGridNavigation({
     confirmEditing,
     onAddCueBelow,
     onAddCueAtEnd,
+    onRepeatLastValue,
   ])
 
   // Keep the focused cell scrolled into view.

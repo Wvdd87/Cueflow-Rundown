@@ -24,7 +24,7 @@ export interface RundownActions {
   deleteCues: (ids: string[]) => Promise<{ error?: string }>
   reorderCues: (orderedIds: string[]) => Promise<{ error?: string }>
   setCuesBackground: (ids: string[], color: string | null) => Promise<{ error?: string }>
-  duplicateCues: (ids: string[]) => Promise<{ error?: string }>
+  duplicateCues: (ids: string[]) => Promise<{ error?: string; newIds?: Record<string, string> }>
   getRundownCues: () => Promise<{ cues: Cue[]; cells: Cell[] }>
   upsertCell: (
     cueId: string,
