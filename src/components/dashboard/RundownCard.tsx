@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { FileText, MoreHorizontal, Pencil, Copy, Trash2, Check, X, FolderInput } from 'lucide-react'
 import { renameRundown, deleteRundown, duplicateRundown, moveRundown } from '@/app/actions/rundowns'
 import {
@@ -27,9 +28,11 @@ const MENU_ITEM =
   'gap-2.5 px-3.5 py-2.5 font-cond text-[11px] font-bold uppercase tracking-[0.1em] text-[#c8c9d0] focus:bg-[#16161c] focus:text-[#eef0f3] cursor-pointer'
 
 export function RundownCard({ rundown, allEvents = [] }: RundownCardProps) {
+  const router = useRouter()
   const [renaming, setRenaming] = useState(false)
   const [name, setName] = useState(rundown.name)
   const [saving, setSaving] = useState(false)
+  const [duplicating, setDuplicating] = useState(false)
 
   async function handleMove(eventId: string | null) {
     const result = await moveRundown(rundown.id, eventId)
@@ -60,9 +63,22 @@ export function RundownCard({ rundown, allEvents = [] }: RundownCardProps) {
   }
 
   async function handleDuplicate() {
-    const result = await duplicateRundown(rundown.id)
-    if (result.error) toast.error(result.error)
-    else toast.success('Rundown duplicated')
+    if (duplicating) return
+    setDuplicating(true)
+    const toastId = toast.loading('Duplicating rundown…')
+    try {
+      const result = await duplicateRundown(rundown.id)
+      if (result.error) {
+        toast.error(result.error, { id: toastId })
+      } else {
+        toast.success('Rundown duplicated', { id: toastId })
+        // revalidatePath alone doesn't re-render the client dashboard, so the
+        // copy wouldn't appear until a manual reload — refresh to pull it in.
+        router.refresh()
+      }
+    } finally {
+      setDuplicating(false)
+    }
   }
 
   const formattedDate = rundown.show_date
