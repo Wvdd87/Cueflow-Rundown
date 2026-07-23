@@ -1093,6 +1093,91 @@ export function RundownEditor({
     if (r.error) toast.error(r.error)
   }, [selectedIds, rundown.id, trackSave])
 
+  // --- Bulk field edit (#71.3): set a column/duration/not-final value on every
+  // selected leaf cue at once. Heading rows are never touched. Each op is a
+  // single undoable history entry with an Undo toast. ---
+  const undoToast = useCallback((label: string) => {
+    toast.success(label, { action: { label: 'Undo', onClick: () => { historyRef.current.undo() } } })
+  }, [])
+
+  const handleBulkSetCell = useCallback(async (colId: string, rawValue: string) => {
+    const targets = cuesRef.current.filter((c) => selectedIds.has(c.id) && c.cue_type !== 'heading')
+    if (targets.length === 0) return
+    const col = columns.find((c) => c.id === colId)
+    // Richtext cells store HTML; wrap the plain bulk value in a paragraph and
+    // escape it. Dropdown values already arrive as a JSON array string.
+    const value =
+      col?.col_type === 'richtext'
+        ? (rawValue.trim() ? `<p>${rawValue.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>` : '')
+        : rawValue
+    const before = targets.map((c) => ({ id: c.id, val: cellsRef.current[`${c.id}:${colId}`] ?? '' }))
+    const applyValue = (v: string, forIds: string[]) =>
+      setCells((m) => { const n = { ...m }; for (const id of forIds) n[`${id}:${colId}`] = v; return n })
+    applyValue(value, targets.map((t) => t.id))
+    await Promise.all(targets.map((t) => trackSave(actions.upsertCell(t.id, colId, value))))
+    history.push({
+      label: `Set ${col?.name ?? 'field'} on ${targets.length} cues`,
+      undo: async () => {
+        setCells((m) => { const n = { ...m }; for (const b of before) n[`${b.id}:${colId}`] = b.val; return n })
+        await Promise.all(before.map((b) => actions.upsertCell(b.id, colId, b.val)))
+      },
+      redo: async () => {
+        applyValue(value, targets.map((t) => t.id))
+        await Promise.all(targets.map((t) => actions.upsertCell(t.id, colId, value)))
+      },
+    })
+    undoToast(`Updated ${col?.name ?? 'field'} on ${targets.length} cue${targets.length > 1 ? 's' : ''}`)
+  }, [selectedIds, columns, actions, trackSave, history, undoToast])
+
+  const handleBulkSetDuration = useCallback(async (ms: number) => {
+    const targets = cuesRef.current.filter((c) => selectedIds.has(c.id) && c.cue_type !== 'heading')
+    if (targets.length === 0) return
+    const before = targets.map((c) => ({ id: c.id, duration_ms: c.duration_ms, duration_mode: c.duration_mode }))
+    setCues((prev) => prev.map((c) => (selectedIds.has(c.id) && c.cue_type !== 'heading' ? { ...c, duration_ms: ms, duration_mode: 'manual' as const } : c)))
+    await Promise.all(targets.map((t) => trackSave(actions.updateCue(t.id, { duration_ms: ms, duration_mode: 'manual' }))))
+    history.push({
+      label: `Set duration on ${targets.length} cues`,
+      undo: async () => {
+        setCues((prev) => prev.map((c) => { const b = before.find((x) => x.id === c.id); return b ? { ...c, duration_ms: b.duration_ms, duration_mode: b.duration_mode } : c }))
+        await Promise.all(before.map((b) => actions.updateCue(b.id, { duration_ms: b.duration_ms, duration_mode: b.duration_mode })))
+      },
+      redo: async () => {
+        setCues((prev) => prev.map((c) => (before.some((b) => b.id === c.id) ? { ...c, duration_ms: ms, duration_mode: 'manual' as const } : c)))
+        await Promise.all(targets.map((t) => actions.updateCue(t.id, { duration_ms: ms, duration_mode: 'manual' })))
+      },
+    })
+    undoToast(`Set duration on ${targets.length} cue${targets.length > 1 ? 's' : ''}`)
+  }, [selectedIds, actions, trackSave, history, undoToast])
+
+  const handleBulkSetNotFinal = useCallback(async (value: boolean) => {
+    const targets = cuesRef.current.filter((c) => selectedIds.has(c.id) && c.cue_type !== 'heading')
+    if (targets.length === 0) return
+    const before = targets.map((c) => ({ id: c.id, not_final: c.not_final }))
+    setCues((prev) => prev.map((c) => (selectedIds.has(c.id) && c.cue_type !== 'heading' ? { ...c, not_final: value } : c)))
+    await Promise.all(targets.map((t) => trackSave(actions.updateCue(t.id, { not_final: value }))))
+    history.push({
+      label: `${value ? 'Flag' : 'Clear'} not-final on ${targets.length} cues`,
+      undo: async () => {
+        setCues((prev) => prev.map((c) => { const b = before.find((x) => x.id === c.id); return b ? { ...c, not_final: b.not_final } : c }))
+        await Promise.all(before.map((b) => actions.updateCue(b.id, { not_final: b.not_final })))
+      },
+      redo: async () => {
+        setCues((prev) => prev.map((c) => (before.some((b) => b.id === c.id) ? { ...c, not_final: value } : c)))
+        await Promise.all(targets.map((t) => actions.updateCue(t.id, { not_final: value })))
+      },
+    })
+    undoToast(`${value ? 'Marked' : 'Cleared'} not-final on ${targets.length} cue${targets.length > 1 ? 's' : ''}`)
+  }, [selectedIds, actions, trackSave, history, undoToast])
+
+  // Common value of a column across the selected leaf cues (null = mixed), so
+  // the bulk editor can show a "Multiple values" placeholder.
+  const bulkCommonCellValue = useCallback((colId: string): string | null => {
+    const targets = cuesRef.current.filter((c) => selectedIds.has(c.id) && c.cue_type !== 'heading')
+    if (targets.length === 0) return ''
+    const vals = new Set(targets.map((t) => cellsRef.current[`${t.id}:${colId}`] ?? ''))
+    return vals.size === 1 ? [...vals][0] : null
+  }, [selectedIds])
+
   const handleDuplicate = useCallback(async () => {
     const ids = [...selectedIds]
     if (ids.length === 0) return
@@ -1500,6 +1585,7 @@ export function RundownEditor({
               <BatchToolbar
                 count={selectedIds.size}
                 canUngroup={canUngroup}
+                columns={columns}
                 onSelectAll={handleSelectAll}
                 onDuplicate={handleDuplicate}
                 duplicating={batchDuplicating}
@@ -1507,6 +1593,10 @@ export function RundownEditor({
                 onUngroup={handleUngroup}
                 onMove={handleMove}
                 onBackground={handleBatchBackground}
+                commonCellValue={bulkCommonCellValue}
+                onBulkSetCell={handleBulkSetCell}
+                onBulkSetDuration={handleBulkSetDuration}
+                onBulkSetNotFinal={handleBulkSetNotFinal}
                 onDelete={handleBatchDelete}
                 onClear={handleClearSelection}
               />
