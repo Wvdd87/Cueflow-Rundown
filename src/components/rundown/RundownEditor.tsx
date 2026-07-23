@@ -41,6 +41,7 @@ import { RundownSearch } from './RundownSearch'
 import type { SearchCue } from './RundownSearch'
 import { FinalizeWarningDialog, type NotFinalCueRef } from './FinalizeWarningDialog'
 import { TakeShowControlDialog } from './TakeShowControlDialog'
+import { FindReplacePanel, type FindReplaceState } from './FindReplacePanel'
 import { emptyFilters, hasActiveFilters, computeCueVisibility, type CueFilterState } from './cueFilters'
 import { RundownDataProvider } from './RundownDataContext'
 import type { RundownSettings } from './RundownDataContext'
@@ -1328,6 +1329,106 @@ export function RundownEditor({
   })
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
 
+  // --- Find & replace (#71.4) — operates on the plaintext of cue titles and
+  // richtext column cells (heading titles included; timing columns excluded).
+  // Replacing a richtext cell rewrites it as plain text (formatting is lost on
+  // matched cells, an accepted trade-off for cross-field replace). ---
+  const [findReplaceOpen, setFindReplaceOpen] = useState(false)
+  const [fr, setFr] = useState<FindReplaceState>({ find: '', replace: '', scope: 'all', matchCase: false, wholeValue: false })
+  const [frIndex, setFrIndex] = useState(0)
+  const setFrState = useCallback((patch: Partial<FindReplaceState>) => {
+    setFr((s) => ({ ...s, ...patch }))
+    setFrIndex(0)
+  }, [])
+
+  const frMatchesText = useCallback((text: string) => {
+    if (!fr.find) return false
+    const t = fr.matchCase ? text : text.toLowerCase()
+    const q = fr.matchCase ? fr.find : fr.find.toLowerCase()
+    return fr.wholeValue ? t === q : t.includes(q)
+  }, [fr.find, fr.matchCase, fr.wholeValue])
+
+  const frTargets = useMemo(() => {
+    if (!fr.find) return [] as { cueId: string; field: string }[]
+    const richIds = columns.filter((c) => c.col_type === 'richtext').map((c) => c.id)
+    const out: { cueId: string; field: string }[] = []
+    for (const cue of layout.docOrder) {
+      const fields = fr.scope === 'all' ? ['title', ...richIds] : [fr.scope]
+      for (const f of fields) {
+        if (cue.cue_type === 'heading' && f !== 'title') continue
+        const raw = f === 'title' ? (cue.title ?? '') : (cells[`${cue.id}:${f}`] ?? '')
+        if (frMatchesText(stripHtml(raw))) out.push({ cueId: cue.id, field: f })
+      }
+    }
+    return out
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fr.find, fr.scope, fr.matchCase, fr.wholeValue, columns, layout, cells])
+
+  const frGoto = useCallback((idx: number) => {
+    if (frTargets.length === 0) return
+    const i = ((idx % frTargets.length) + frTargets.length) % frTargets.length
+    setFrIndex(i)
+    const t = frTargets[i]
+    handleScrollToNotFinalCue(t.cueId)
+    flashCell(t.cueId, t.field)
+  }, [frTargets, handleScrollToNotFinalCue, flashCell])
+
+  const frApply = useCallback(async (targets: { cueId: string; field: string }[]) => {
+    if (targets.length === 0) return
+    const escHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    const escReg = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const toHtml = (s: string) => (s.trim() ? `<p>${escHtml(s)}</p>` : '')
+    const nextPlain = (plain: string) => {
+      if (fr.wholeValue) return frMatchesText(plain) ? fr.replace : plain
+      return plain.replace(new RegExp(escReg(fr.find), fr.matchCase ? 'g' : 'gi'), fr.replace)
+    }
+    const before: { cueId: string; field: string; val: string }[] = []
+    const writes: Promise<unknown>[] = []
+    for (const t of targets) {
+      if (t.field === 'title') {
+        const cue = cuesRef.current.find((c) => c.id === t.cueId)
+        if (!cue) continue
+        const plain = stripHtml(cue.title ?? '')
+        const next = nextPlain(plain)
+        if (next === plain) continue
+        before.push({ cueId: t.cueId, field: 'title', val: cue.title ?? '' })
+        handleUpdateCue(t.cueId, { title: toHtml(next) })
+        writes.push(trackSave(actions.updateCue(t.cueId, { title: toHtml(next) })))
+      } else {
+        const raw = cellsRef.current[`${t.cueId}:${t.field}`] ?? ''
+        const plain = stripHtml(raw)
+        const next = nextPlain(plain)
+        if (next === plain) continue
+        before.push({ cueId: t.cueId, field: t.field, val: raw })
+        handleCellChange(t.cueId, t.field, toHtml(next))
+        writes.push(trackSave(actions.upsertCell(t.cueId, t.field, toHtml(next))))
+      }
+    }
+    if (before.length === 0) return
+    await Promise.all(writes)
+    history.push({
+      label: `Replace "${fr.find}"`,
+      undo: async () => {
+        for (const b of before) {
+          if (b.field === 'title') { handleUpdateCue(b.cueId, { title: b.val }); await actions.updateCue(b.cueId, { title: b.val }) }
+          else { handleCellChange(b.cueId, b.field, b.val); await actions.upsertCell(b.cueId, b.field, b.val) }
+        }
+      },
+      redo: async () => { await frApply(targets) },
+    })
+    undoToast(`Replaced ${before.length} field${before.length > 1 ? 's' : ''}`)
+  }, [fr, frMatchesText, actions, trackSave, history, undoToast, handleUpdateCue, handleCellChange])
+
+  const frReplaceOne = useCallback(async () => {
+    const t = frTargets[frTargets.length ? frIndex % frTargets.length : 0]
+    if (t) await frApply([t])
+  }, [frTargets, frIndex, frApply])
+
+  const frReplaceAll = useCallback(async () => {
+    if (frTargets.length === 0) return
+    await frApply(frTargets)
+  }, [frTargets, frApply])
+
   async function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event
     if (!over || active.id === over.id) return
@@ -1536,6 +1637,7 @@ export function RundownEditor({
           }}
           onOpenTrash={() => setTrashOpen(true)}
           onOpenRules={() => setRulesOpen(true)}
+          onOpenFindReplace={() => setFindReplaceOpen(true)}
           onOpenShortcuts={() => setShortcutsOpen(true)}
           searchCues={searchCues}
           onSearchSelect={handleSearchSelect}
@@ -1580,6 +1682,19 @@ export function RundownEditor({
 
         {/* flex-1 wrapper is relative so BatchToolbar can float above content without pushing rows */}
         <div className="flex-1 overflow-hidden relative">
+          <FindReplacePanel
+            open={findReplaceOpen}
+            onClose={() => setFindReplaceOpen(false)}
+            columns={columns}
+            state={fr}
+            setState={setFrState}
+            matchCount={frTargets.length}
+            current={frTargets.length ? (frIndex % frTargets.length) + 1 : 0}
+            onPrev={() => frGoto(frIndex - 1)}
+            onNext={() => frGoto(frIndex + 1)}
+            onReplace={frReplaceOne}
+            onReplaceAll={frReplaceAll}
+          />
           {selectedIds.size > 0 && (
             <div className="absolute top-0 left-0 right-0 z-50 shadow-[0_4px_20px_rgba(0,0,0,0.55)]">
               <BatchToolbar

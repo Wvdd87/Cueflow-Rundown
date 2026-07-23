@@ -23,6 +23,7 @@ import {
   Loader2,
   Keyboard,
   Sparkles,
+  Replace,
 } from 'lucide-react'
 import {
   renameRundown,
@@ -72,6 +73,7 @@ interface RundownHeaderProps {
   onResetTiming: () => void
   onOpenTrash: () => void
   onOpenRules: () => void
+  onOpenFindReplace: () => void
   onOpenShortcuts: () => void
   canUndo: boolean
   canRedo: boolean
@@ -117,6 +119,7 @@ export function RundownHeader({
   onResetTiming,
   onOpenTrash,
   onOpenRules,
+  onOpenFindReplace,
   onOpenShortcuts,
   canUndo,
   canRedo,
@@ -370,6 +373,9 @@ export function RundownHeader({
               </DropdownMenuItem>
               <DropdownMenuItem data-testid="open-rules-menu-item" onClick={onOpenRules} className={MENU_ITEM}>
                 <Sparkles className="w-3.5 h-3.5 text-[#9ba0ab]" /> Rules
+              </DropdownMenuItem>
+              <DropdownMenuItem data-testid="open-find-replace-menu-item" onClick={onOpenFindReplace} className={MENU_ITEM}>
+                <Replace className="w-3.5 h-3.5 text-[#9ba0ab]" /> Find &amp; replace
               </DropdownMenuItem>
 
               <DropdownMenuSeparator className="bg-[#1d1d24]" />
