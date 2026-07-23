@@ -301,7 +301,14 @@ export function CueRow({
       onClick={(e) => e.stopPropagation()}
       onClickCapture={(e) => {
         const colId = (e.target as HTMLElement).closest('[data-col-id]')?.getAttribute('data-col-id')
-        if (colId) onCellFocus?.(cue.id, colId, e.shiftKey)
+        if (!colId) return
+        // Defer the grid-focus state update to after this click finishes
+        // dispatching. Setting focusedCell synchronously here re-renders the cell
+        // mid-click and, for cells rendered via dangerouslySetInnerHTML (a filled
+        // richtext cell), swallows the bubble onClick that starts editing — so a
+        // click on a non-empty cell only set focus and never opened the editor (#74).
+        const shift = e.shiftKey
+        setTimeout(() => onCellFocus?.(cue.id, colId, shift), 0)
       }}
     >
       {/* Parent group — shown above the current-cue indicator so a sub-cue's

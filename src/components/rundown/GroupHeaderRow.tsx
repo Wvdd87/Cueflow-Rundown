@@ -137,7 +137,10 @@ export function GroupHeaderRow({
       data-cue-id={heading.id}
       onClick={(e) => e.stopPropagation()}
       onClickCapture={(e) => {
-        if ((e.target as HTMLElement).closest('[data-col-id]')) onCellFocus?.(heading.id, 'title')
+        // Defer focus to after the click dispatches — see the CueRow note (#74):
+        // a synchronous focusedCell update swallows the bubble onClick that opens
+        // the editor for a filled (dangerouslySetInnerHTML) heading title.
+        if ((e.target as HTMLElement).closest('[data-col-id]')) setTimeout(() => onCellFocus?.(heading.id, 'title'), 0)
       }}
     >
       {/* Control gutter */}
