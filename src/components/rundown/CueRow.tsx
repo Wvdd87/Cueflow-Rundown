@@ -30,6 +30,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { RichTextCell } from './RichTextCell'
 import { InlineTipTap } from './InlineTipTap'
+import type { Suggestion } from './useFieldSuggestions'
 import { DropdownCell } from './DropdownCell'
 import { PrivateNoteCell } from './PrivateNoteCell'
 import { ScriptDrawer } from './ScriptDrawer'
@@ -71,6 +72,9 @@ interface CueRowProps {
   duplicating?: boolean
   onRemoveFromGroup?: (id: string) => void
   onCellChange: (cueId: string, columnId: string, content: string) => void
+  /** Field-value autocomplete provider (#71.1) — (field, query) → suggestions,
+   *  where field is 'title' | 'subtitle' | a column id. */
+  getFieldSuggestions?: (field: string, query: string) => Suggestion[]
   onCellAttachmentsChange: (cueId: string, columnId: string, attachments: CellAttachment[]) => void
   onAddScript: (id: string) => void
   onScriptsChange: (id: string, scripts: ScriptBlock[]) => void
@@ -133,6 +137,7 @@ export function CueRow({
   duplicating,
   onRemoveFromGroup,
   onCellChange,
+  getFieldSuggestions,
   onCellAttachmentsChange,
   onAddScript,
   onScriptsChange,
@@ -634,6 +639,7 @@ export function CueRow({
                   rundownId={rundownId}
                   initialContent={cells[`${cue.id}:${col.id}`] ?? ''}
                   onContentChange={onCellChange}
+                  getSuggestions={getFieldSuggestions ? (q) => getFieldSuggestions(col.id, q) : undefined}
                 />
               )}
             </div>
@@ -662,6 +668,7 @@ export function CueRow({
               initialContent={cue.title}
               onSave={saveTitleHtml}
               selectAllOnFocus={selectTitleOnFocus}
+              getSuggestions={getFieldSuggestions ? (q) => getFieldSuggestions('title', q) : undefined}
               editorClassName="tiptap-cell focus:outline-none w-full text-[15px] font-medium border-b border-[#f0a838]"
               className="w-full"
             />
@@ -682,6 +689,7 @@ export function CueRow({
             <InlineTipTap
               initialContent={cue.subtitle ?? ''}
               onSave={saveSubtitleHtml}
+              getSuggestions={getFieldSuggestions ? (q) => getFieldSuggestions('subtitle', q) : undefined}
               editorClassName="tiptap-cell focus:outline-none w-full text-xs border-b border-[#3a3a48] mt-0.5"
               className="w-full mt-0.5"
             />
@@ -767,6 +775,7 @@ export function CueRow({
                     rundownId={rundownId}
                     initialContent={cells[`${cue.id}:${col.id}`] ?? ''}
                     onContentChange={onCellChange}
+                    getSuggestions={getFieldSuggestions ? (q) => getFieldSuggestions(col.id, q) : undefined}
                   />
                 )}
               </div>

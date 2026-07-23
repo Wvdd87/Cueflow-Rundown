@@ -47,6 +47,7 @@ import { RundownDataProvider } from './RundownDataContext'
 import type { RundownSettings } from './RundownDataContext'
 import { useSaveStatus } from './useSaveStatus'
 import { useGridNavigation } from './useGridNavigation'
+import { useFieldSuggestions } from './useFieldSuggestions'
 import { KeyboardShortcutsDialog } from './KeyboardShortcutsDialog'
 import { buildCueLayout, formatCueNumber } from './cueTree'
 import { CF, totalRowWidth, PRIVATE_NOTES_ID } from './layout'
@@ -1429,6 +1430,14 @@ export function RundownEditor({
     undoToast(`Pasted ${filled} cell${filled > 1 ? 's' : ''}`)
   }, [renderableIds, columnAxis, columns, actions, trackSave, history, undoToast, handleUpdateCue, handleCellChange, handlePrivateNoteChange])
 
+  // Field-value autocomplete + smart title suggestions (#71.1 / #71.6).
+  const { getSuggestions: getFieldSuggestions } = useFieldSuggestions({
+    rundownId: rundown.id,
+    columns,
+    getCues: () => cuesRef.current,
+    getCells: () => cellsRef.current,
+  })
+
   const gridNav = useGridNavigation({
     cues,
     visibleColumns,
@@ -1689,6 +1698,7 @@ export function RundownEditor({
         onCellFocus={gridNav.focusCell}
         onRemoveFromGroup={handleRemoveFromGroup}
         onCellChange={handleCellChange}
+        getFieldSuggestions={getFieldSuggestions}
         onCellAttachmentsChange={handleCellAttachmentsChange}
         onAddScript={handleAddScript}
         onScriptsChange={handleScriptsChange}

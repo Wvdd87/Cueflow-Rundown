@@ -30,6 +30,8 @@ import { uploadCellFile, isImageFile } from '@/lib/upload'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import type { Mention, Variable } from '@/lib/supabase/types'
+import type { Suggestion } from './useFieldSuggestions'
+import { CellSuggestions } from './CellSuggestions'
 
 // 6 × 4 = 24 preset colors
 const SWATCH_COLORS = [
@@ -45,6 +47,8 @@ interface RichTextCellProps {
   rundownId: string
   initialContent: string
   onContentChange: (cueId: string, columnId: string, content: string) => void
+  /** Field-value autocomplete provider for this column (#71.1). */
+  getSuggestions?: (query: string) => Suggestion[]
 }
 
 export function RichTextCell({
@@ -53,6 +57,7 @@ export function RichTextCell({
   rundownId,
   initialContent,
   onContentChange,
+  getSuggestions,
 }: RichTextCellProps) {
   const { mentions, variables, trackSave, actions, collab } = useRundownData()
   const locked = !!collab && !collab.editableColumns.includes(columnId)
@@ -91,6 +96,7 @@ export function RichTextCell({
         mentions={mentions}
         variables={variables}
         onSave={handleSave}
+        getSuggestions={getSuggestions}
       />
     )
   }
@@ -250,16 +256,31 @@ function CellTipTap({
   mentions,
   variables,
   onSave,
+  getSuggestions,
 }: {
   initialContent: string
   rundownId: string
   mentions: Mention[]
   variables: Variable[]
   onSave: (html: string) => void
+  getSuggestions?: (query: string) => Suggestion[]
 }) {
   const wrapperRef = useRef<HTMLDivElement>(null)
   const savedRef = useRef(false)
   const editorRef = useRef<Editor | null>(null)
+
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([])
+  const [highlighted, setHighlighted] = useState(0)
+  const suggestionsRef = useRef(suggestions)
+  suggestionsRef.current = suggestions
+  const highlightedRef = useRef(highlighted)
+  highlightedRef.current = highlighted
+  const getSuggestionsRef = useRef(getSuggestions)
+  getSuggestionsRef.current = getSuggestions
+  const acceptRef = useRef<() => void>(() => {})
+  // While the @/$ mention popup is open, suppress value-autocomplete so the two
+  // don't fight over the keyboard.
+  const mentionPopupOpen = () => typeof document !== 'undefined' && !!document.querySelector('.tippy-box')
 
   const mentionsRef = useRef(mentions)
   mentionsRef.current = mentions
@@ -324,6 +345,12 @@ function CellTipTap({
     ],
     content: initialContent || '',
     autofocus: 'end',
+    onUpdate({ editor }) {
+      const fn = getSuggestionsRef.current
+      if (!fn || mentionPopupOpen()) { setSuggestions([]); return }
+      setSuggestions(fn(editor.getText()))
+      setHighlighted(0)
+    },
     editorProps: {
       attributes: {
         class:
@@ -332,6 +359,27 @@ function CellTipTap({
       // Plain Enter is reserved for grid navigation (confirm + move down a row);
       // Shift+Enter still inserts a line break via the default HardBreak binding.
       handleKeyDown(_view, event) {
+        // Value-autocomplete keys — only when the @/$ mention popup isn't open.
+        const sugg = suggestionsRef.current
+        if (sugg.length > 0 && !mentionPopupOpen()) {
+          if (event.key === 'ArrowDown') {
+            event.preventDefault(); event.stopPropagation()
+            setHighlighted((h) => (h + 1) % sugg.length); return true
+          }
+          if (event.key === 'ArrowUp') {
+            event.preventDefault(); event.stopPropagation()
+            setHighlighted((h) => (h - 1 + sugg.length) % sugg.length); return true
+          }
+          if (event.key === 'Escape') {
+            event.preventDefault(); event.stopPropagation()
+            setSuggestions([]); return true
+          }
+          if ((event.key === 'Enter' && !event.shiftKey) || event.key === 'Tab') {
+            event.preventDefault()
+            acceptRef.current()
+            return true
+          }
+        }
         if (event.key === 'Enter' && !event.shiftKey) {
           event.preventDefault()
           return true
@@ -357,6 +405,16 @@ function CellTipTap({
     },
   })
   editorRef.current = editor
+
+  acceptRef.current = () => {
+    if (!editor) return
+    const v = suggestionsRef.current[highlightedRef.current]?.value
+    if (v == null) return
+    const esc = v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    editor.commands.setContent(`<p>${esc}</p>`)
+    editor.commands.focus('end')
+    setSuggestions([])
+  }
 
   const save = useCallback(() => {
     if (!editor || savedRef.current) return
@@ -397,7 +455,8 @@ function CellTipTap({
       ref={wrapperRef}
       className="relative w-full"
       onKeyDown={(e) => {
-        if (e.key === 'Escape') {
+        // Escape closes the suggestion popover first; only otherwise confirms.
+        if (e.key === 'Escape' && suggestionsRef.current.length === 0) {
           e.preventDefault()
           save()
         }
@@ -408,6 +467,17 @@ function CellTipTap({
         <EditorContent editor={editor} />
         <FileToolbar onFiles={handleFiles} />
       </div>
+      <CellSuggestions
+        suggestions={suggestions}
+        highlighted={highlighted}
+        onHover={setHighlighted}
+        onPick={(value) => {
+          const esc = value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+          editor.commands.setContent(`<p>${esc}</p>`)
+          editor.commands.focus('end')
+          setSuggestions([])
+        }}
+      />
     </div>
   )
 }
