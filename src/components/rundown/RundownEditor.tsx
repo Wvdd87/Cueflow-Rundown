@@ -40,6 +40,7 @@ import { RundownTrashDialog } from './RundownTrashDialog'
 import { RundownSearch } from './RundownSearch'
 import type { SearchCue } from './RundownSearch'
 import { FinalizeWarningDialog, type NotFinalCueRef } from './FinalizeWarningDialog'
+import { TakeShowControlDialog } from './TakeShowControlDialog'
 import { emptyFilters, hasActiveFilters, computeCueVisibility, type CueFilterState } from './cueFilters'
 import { RundownDataProvider } from './RundownDataContext'
 import type { RundownSettings } from './RundownDataContext'
@@ -188,6 +189,7 @@ export function RundownEditor({
     })
   }, [rundown.id, trackSave])
   const [finalizeWarningOpen, setFinalizeWarningOpen] = useState(false)
+  const [takeoverOpen, setTakeoverOpen] = useState(false)
   const [filters, setFilters] = useState<CueFilterState>(() => emptyFilters())
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   // Per-user view state below starts at deterministic defaults so the first
@@ -504,6 +506,29 @@ export function RundownEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isShowLeader, live.isLive, live.activeCueId, live.nextCueId, live.remainingMs, live.elapsedMs, remoteLive])
 
+  // Take control of the show (reclaiming leadership from whoever held it) and
+  // start the transport — optionally from a specific cue rather than the top.
+  const startShow = useCallback(async (fromCueId?: string) => {
+    if (collab) await collabTakeControl(collab.token)
+    else await takeShowControl(rundown.id)
+    leader.refresh()
+    setSelectedIds(new Set())
+    live.start(fromCueId)
+  }, [collab, rundown.id, leader, live])
+
+  // When another operator is actively running the show, clicking "Run show"
+  // asks whether to resume from their current cue or start over (#68). The cue
+  // they're on comes from the leader's broadcast (effectiveLive.activeCueId).
+  const remoteActiveCue = !isShowLeader && effectiveLive.activeCueId ? timedMap[effectiveLive.activeCueId] : undefined
+  const remoteActiveCueNumber = remoteActiveCue
+    ? formatCueNumber(
+        layout.numberOf[remoteActiveCue.id] ?? '',
+        rundownSettings.cue_number_prefix,
+        rundownSettings.cue_number_start,
+        rundownSettings.cue_number_digits
+      )
+    : null
+
   // Live transport keyboard shortcuts: Space / ArrowDown = next cue, ArrowUp = previous.
   // Stable ref so the keydown handler never needs to re-register.
   const liveRef = useRef(live)
@@ -541,6 +566,22 @@ export function RundownEditor({
     const rr = row.getBoundingClientRect()
     cont.scrollTo({ top: cont.scrollTop + (rr.top - cr.top) - (CF.headerH + 8), behavior: 'smooth' })
   }, [effectiveLive.activeCueId])
+
+  // Auto-pin the active cue to the top on every advance while the show is live.
+  // Centralised here (rather than in each CueRow) so it fires reliably for the
+  // owner *and* any collaborator running the show (#69). Manual scrolling
+  // between advances is preserved; the "Jump to current cue" pill re-pins.
+  const prevActiveCueRef = useRef<string | null>(null)
+  useEffect(() => {
+    const id = effectiveLive.isLive ? effectiveLive.activeCueId : null
+    if (id && id !== prevActiveCueRef.current) {
+      // Let the newly-active row render/measure before pinning.
+      const raf = requestAnimationFrame(() => scrollActiveCueToTop())
+      prevActiveCueRef.current = id
+      return () => cancelAnimationFrame(raf)
+    }
+    prevActiveCueRef.current = id
+  }, [effectiveLive.isLive, effectiveLive.activeCueId, scrollActiveCueToTop])
 
   useEffect(() => {
     const cont = cueScrollRef.current
@@ -1304,15 +1345,16 @@ export function RundownEditor({
           onPlayClick={async () => {
             if (live.isLive) { live.end(); return }
             if (!canRunShow) return
-            // Reclaim/take show control — starting the show is always a
-            // deliberate override of whoever was previously driving.
-            if (collab) await collabTakeControl(collab.token)
-            else await takeShowControl(rundown.id)
-            leader.refresh()
+            // Someone else is actively running the show → ask whether to resume
+            // from their current cue or start over (#68), instead of silently
+            // hijacking to the top.
+            if (remoteActiveCue) {
+              setTakeoverOpen(true)
+              return
+            }
             // Start from the earliest selected cue (in document order), else cue 1.
             const startId = liveCues.find((c) => selectedIds.has(c.id))?.id
-            setSelectedIds(new Set())
-            live.start(startId)
+            await startShow(startId)
           }}
           isLive={live.isLive}
           canRunShow={canRunShow}
@@ -1644,6 +1686,16 @@ export function RundownEditor({
           notFinalCues={notFinalCues}
           onScrollToCue={handleScrollToNotFinalCue}
           onConfirm={() => commitStatusChange('finalized')}
+        />
+
+        <TakeShowControlDialog
+          open={takeoverOpen}
+          onOpenChange={setTakeoverOpen}
+          leaderLabel={leader.leaderLabel}
+          currentCueNumber={remoteActiveCueNumber}
+          currentCueTitle={remoteActiveCue ? stripHtml(remoteActiveCue.title ?? '') : null}
+          onContinue={() => startShow(effectiveLive.activeCueId ?? undefined)}
+          onStartOver={() => startShow(undefined)}
         />
 
         <KeyboardShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />

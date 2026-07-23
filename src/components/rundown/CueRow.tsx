@@ -186,20 +186,9 @@ export function CueRow({
     marginBottom: CF.gap,
   }
 
-  // During live mode, pin the active cue to the top — offset by the sticky
-  // column header so the active cue isn't hidden behind it.
-  useEffect(() => {
-    if (!isActive) return
-    const cont = document.querySelector('[data-cue-scroll]') as HTMLElement | null
-    const row = rowRef.current
-    if (!cont || !row) {
-      rowRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })
-      return
-    }
-    const cr = cont.getBoundingClientRect()
-    const rr = row.getBoundingClientRect()
-    cont.scrollTo({ top: cont.scrollTop + (rr.top - cr.top) - (CF.headerH + 8), behavior: 'smooth' })
-  }, [isActive])
+  // Pinning the active cue to the top during live mode is handled centrally in
+  // RundownEditor (so it fires reliably for the owner and any collaborator
+  // running the show — see #69), not per-row here.
 
   // --- Editing handlers ---
   function startDurationEdit() {
