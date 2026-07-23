@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Link2, Copy, Check, Trash2, Globe, Plus, Loader2 } from 'lucide-react'
+import { Link2, Copy, Check, Trash2, Globe, Plus, Loader2, Share2 } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -95,11 +95,17 @@ export function ShareDialog({ rundownId, columns, open, onOpenChange }: ShareDia
       <DialogContent className="bg-[#111116] border-[#2e2e38] text-white sm:max-w-lg p-0 gap-0 border-t-2 border-t-[#f0a838]">
         <DialogHeader className="px-5 py-4 border-b border-[#1d1d24]">
           <DialogTitle className="flex items-center gap-2">
-            <Globe className="w-4 h-4 text-[#9ba0ab]" /> Read-only links
+            <Share2 className="w-4 h-4 text-[#9ba0ab]" /> Sharing
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4 p-5 overflow-y-auto max-h-[calc(85vh-68px)]">
+        <div className="space-y-6 p-5 overflow-y-auto max-h-[calc(85vh-68px)]">
+          {/* Read-only links */}
+          <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <Globe className="w-4 h-4 text-[#9ba0ab]" />
+            <h3 className="text-sm font-medium text-[#eef0f3]">Read-only links</h3>
+          </div>
           <p className="text-sm text-[#9ba0ab]">
             Make a separate link per person or team. Each link can show a different
             set of columns, and follows the show live as you run it.
@@ -107,6 +113,11 @@ export function ShareDialog({ rundownId, columns, open, onOpenChange }: ShareDia
 
           {/* Existing links */}
           <div className="space-y-3 max-h-72 overflow-y-auto">
+            {loading && (
+              <div className="flex items-center gap-2 text-sm text-[#7c7e8a]">
+                <Loader2 className="w-4 h-4 animate-spin" /> Loading links…
+              </div>
+            )}
             {shares.length === 0 && !loading && (
               <p className="text-sm text-[#5a5c66] italic">No links yet.</p>
             )}
@@ -194,6 +205,7 @@ export function ShareDialog({ rundownId, columns, open, onOpenChange }: ShareDia
               {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
               {creating ? 'Generating link…' : 'Create link'}
             </button>
+          </div>
           </div>
 
           <CollabLinksSection rundownId={rundownId} columns={columns} open={open} />

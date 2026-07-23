@@ -103,7 +103,7 @@ interface CueRowProps {
   focusedColId?: string | null
   onCellFocus?: (cueId: string, colId: string) => void
   /** Debounced conditional-rules result for this row (#65) — background/text
-   *  color already resolved against the manual color, badges to render. */
+   *  color already resolved against the manual color, plus a not-final flag. */
   ruleResult?: RuleRowResult
 }
 
@@ -482,18 +482,6 @@ export function CueRow({
           <span className="font-mono text-sm font-bold tabular-nums" style={{ color: numColor }}>
             {displayNumber}
           </span>
-          {ruleResult && ruleResult.badges.length > 0 && (
-            <span
-              data-testid="rule-badges"
-              className="leading-none"
-              style={{ fontSize: 10 }}
-              title={ruleResult.badges.map((b) => b.label).join(', ')}
-            >
-              {ruleResult.badges.slice(0, 3).map((b, i) => (
-                <span key={i}>{b.icon}</span>
-              ))}
-            </span>
-          )}
         </div>
 
         {/* Start time */}
@@ -666,10 +654,10 @@ export function CueRow({
           className="group/title shrink-0 flex flex-col"
           style={{ width: titleWidth, minHeight: CF.minRowH, background: baseCellBg, padding: '12px 16px', ...ringStyle('title') }}
         >
-          {cue.not_final && (
+          {(cue.not_final || ruleResult?.notFinal) && (
             <span
               data-testid="not-final-badge"
-              title="Marked as not final yet"
+              title={cue.not_final ? 'Marked as not final yet' : 'Flagged not final by a rule'}
               className="inline-flex items-center gap-1 self-start mb-1 px-1.5 py-[1px] font-cond text-[9px] font-bold uppercase tracking-[0.12em]"
               style={{ color: '#f0a838', border: '1px solid rgba(240,168,56,0.5)', background: 'rgba(240,168,56,0.1)' }}
             >

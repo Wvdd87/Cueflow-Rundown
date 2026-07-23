@@ -29,11 +29,12 @@ async function copyRundownContents(
   sourceId: string,
   targetId: string
 ) {
-  // Columns
+  // Columns (skip trashed ones — copying them would revive deleted columns)
   const { data: colData } = await supabase
     .from('columns')
     .select('*')
     .eq('rundown_id', sourceId)
+    .is('deleted_at', null)
     .order('position', { ascending: true })
   const colMap = new Map<string, string>()
   for (const c of (colData ?? []) as Column[]) {
@@ -53,11 +54,13 @@ async function copyRundownContents(
     if (nc) colMap.set(c.id, (nc as { id: string }).id)
   }
 
-  // Cues (group_id remapped in a second pass)
+  // Cues (group_id remapped in a second pass; skip trashed ones so a copy
+  // never revives cues the user deleted in the source rundown)
   const { data: cueData } = await supabase
     .from('cues')
     .select('*')
     .eq('rundown_id', sourceId)
+    .is('deleted_at', null)
     .order('position', { ascending: true })
   const srcCues = (cueData ?? []) as Cue[]
   const cueMap = new Map<string, string>()

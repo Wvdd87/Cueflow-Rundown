@@ -47,7 +47,7 @@ function actionSummary(rule: RundownRule): string {
   const parts: string[] = []
   if (rule.actions.some((a) => a.type === 'set_background_color')) parts.push('Background color')
   if (rule.actions.some((a) => a.type === 'set_text_color')) parts.push('Text color')
-  if (rule.actions.some((a) => a.type === 'add_badge')) parts.push('Badge')
+  if (rule.actions.some((a) => a.type === 'set_not_final')) parts.push('Mark not final')
   return parts.join(' · ') || 'No actions'
 }
 
@@ -114,7 +114,7 @@ export function RulesPanel({ open, onClose, rules, onChange, columns, groups }: 
           <div className="p-5 space-y-3">
             {rules.length === 0 ? (
               <p className="text-sm text-[#7c7e8a]">
-                No rules yet. Rules automatically color or badge cue rows based on their column values.
+                No rules yet. Rules automatically color or flag cue rows based on their column values.
               </p>
             ) : (
               <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
@@ -174,14 +174,13 @@ function SortableRuleRow({
         onClick={onToggleActive}
         title={rule.active ? 'Active — click to disable' : 'Disabled — click to enable'}
         className={cn(
-          'shrink-0 w-8 h-4 rounded-full relative transition-colors',
-          rule.active ? 'bg-[#f0a838]' : 'bg-[#2e2e38]'
+          'shrink-0 px-2 py-1 border font-cond text-[9px] font-bold uppercase tracking-[0.12em] transition-colors',
+          rule.active
+            ? 'border-[#f0a838]/60 text-[#f0a838] bg-[rgba(240,168,56,0.1)]'
+            : 'border-[#2e2e38] text-[#7c7e8a] hover:text-[#c8c9d0] hover:border-[#3a3a48]'
         )}
       >
-        <span
-          className="absolute top-0.5 w-3 h-3 rounded-full bg-[#0a0a0d] transition-transform"
-          style={{ transform: rule.active ? 'translateX(17px)' : 'translateX(3px)' }}
-        />
+        {rule.active ? 'On' : 'Off'}
       </button>
 
       <button data-testid="edit-rule-btn" onClick={onEdit} className="shrink-0 text-[#7c7e8a] hover:text-[#eef0f3] transition-colors">

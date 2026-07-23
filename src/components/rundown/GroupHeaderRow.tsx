@@ -245,19 +245,6 @@ export function GroupHeaderRow({
           )}
         </div>
 
-        {ruleResult && ruleResult.badges.length > 0 && (
-          <span
-            data-testid="rule-badges"
-            className="shrink-0 leading-none mr-1.5"
-            style={{ fontSize: 11 }}
-            title={ruleResult.badges.map((b) => b.label).join(', ')}
-          >
-            {ruleResult.badges.slice(0, 3).map((b, i) => (
-              <span key={i}>{b.icon}</span>
-            ))}
-          </span>
-        )}
-
         {/* Title + (group) aggregate */}
         <div
           data-row-id={heading.id}

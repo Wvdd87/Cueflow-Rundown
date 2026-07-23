@@ -9,7 +9,6 @@ import {
   targetKey,
   targetFromKey,
   CUE_TYPE_VALUES,
-  BADGE_ICON_PRESET,
   RULE_TEXT_COLORS,
 } from '@/lib/rules'
 import { cn } from '@/lib/utils'
@@ -49,15 +48,13 @@ export function RuleForm({ onClose, onSave, columns, groups, initialRule }: Rule
   )
   const bgAction = initialRule?.actions.find((a) => a.type === 'set_background_color')
   const textAction = initialRule?.actions.find((a) => a.type === 'set_text_color')
-  const badgeAction = initialRule?.actions.find((a) => a.type === 'add_badge')
+  const notFinalAction = initialRule?.actions.find((a) => a.type === 'set_not_final')
   const [bgEnabled, setBgEnabled] = useState(!!bgAction)
   const [bgColor, setBgColor] = useState(bgAction?.color ?? CUE_COLORS[1] ?? '#4a1d96')
   const [overrideManual, setOverrideManual] = useState(bgAction?.overrideManualColor ?? false)
   const [textEnabled, setTextEnabled] = useState(!!textAction)
   const [textColor, setTextColor] = useState(textAction?.color ?? RULE_TEXT_COLORS[1])
-  const [badgeEnabled, setBadgeEnabled] = useState(!!badgeAction)
-  const [badgeIcon, setBadgeIcon] = useState(badgeAction?.badgeIcon ?? BADGE_ICON_PRESET[0])
-  const [badgeLabel, setBadgeLabel] = useState(badgeAction?.badgeLabel ?? '')
+  const [notFinalEnabled, setNotFinalEnabled] = useState(!!notFinalAction)
 
   function updateCondition(id: string, patch: Partial<RuleCondition>) {
     setConditions((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)))
@@ -75,7 +72,7 @@ export function RuleForm({ onClose, onSave, columns, groups, initialRule }: Rule
     const actions: RundownRule['actions'] = []
     if (bgEnabled) actions.push({ id: bgAction?.id ?? crypto.randomUUID(), type: 'set_background_color', color: bgColor, overrideManualColor: overrideManual })
     if (textEnabled) actions.push({ id: textAction?.id ?? crypto.randomUUID(), type: 'set_text_color', color: textColor })
-    if (badgeEnabled) actions.push({ id: badgeAction?.id ?? crypto.randomUUID(), type: 'add_badge', badgeIcon, badgeLabel: badgeLabel.trim() || name })
+    if (notFinalEnabled) actions.push({ id: notFinalAction?.id ?? crypto.randomUUID(), type: 'set_not_final' })
     if (actions.length === 0) return
 
     onSave({
@@ -89,7 +86,7 @@ export function RuleForm({ onClose, onSave, columns, groups, initialRule }: Rule
     })
   }
 
-  const canSave = label.trim() !== '' && conditions.length > 0 && (bgEnabled || textEnabled || badgeEnabled)
+  const canSave = label.trim() !== '' && conditions.length > 0 && (bgEnabled || textEnabled || notFinalEnabled)
 
   return (
     <>
@@ -201,36 +198,10 @@ export function RuleForm({ onClose, onSave, columns, groups, initialRule }: Rule
                 </div>
               )}
 
-              <button data-testid="rule-action-badge-toggle" onClick={() => setBadgeEnabled((v) => !v)} className={TOGGLE(badgeEnabled)}>
-                <span className="text-[12.5px]">Add icon/badge to row</span>
-                <span className="font-cond text-[9px] font-bold uppercase tracking-[0.1em]">{badgeEnabled ? 'On' : 'Off'}</span>
+              <button data-testid="rule-action-not-final-toggle" onClick={() => setNotFinalEnabled((v) => !v)} className={TOGGLE(notFinalEnabled)}>
+                <span className="text-[12.5px]">Mark cue as not final</span>
+                <span className="font-cond text-[9px] font-bold uppercase tracking-[0.1em]">{notFinalEnabled ? 'On' : 'Off'}</span>
               </button>
-              {badgeEnabled && (
-                <div className="pl-3 space-y-2 pt-1">
-                  <div className="flex flex-wrap gap-1.5">
-                    {BADGE_ICON_PRESET.map((icon) => (
-                      <button
-                        key={icon}
-                        data-testid={`rule-badge-icon-${icon}`}
-                        onClick={() => setBadgeIcon(icon)}
-                        className={cn(
-                          'w-7 h-7 flex items-center justify-center text-sm border rounded-sm',
-                          badgeIcon === icon ? 'border-[#f0a838]' : 'border-[#2e2e38] hover:border-[#3a3a48]'
-                        )}
-                      >
-                        {icon}
-                      </button>
-                    ))}
-                  </div>
-                  <input
-                    data-testid="rule-badge-label-input"
-                    value={badgeLabel}
-                    onChange={(e) => setBadgeLabel(e.target.value)}
-                    placeholder="Tooltip text (defaults to rule name)"
-                    className={FIELD}
-                  />
-                </div>
-              )}
             </div>
           </div>
 
@@ -288,6 +259,9 @@ function ConditionRow({
             ))}
           </optgroup>
           <optgroup label="Cue properties">
+            <option value="built-in:title">Title</option>
+            <option value="built-in:private_note">Private note</option>
+            <option value="built-in:row_color">Row color</option>
             <option value="built-in:not_final">Not final</option>
             <option value="built-in:cue_type">Cue type</option>
             <option value="built-in:has_no_script">Has no script</option>
@@ -326,6 +300,25 @@ function ConditionRow({
             <option value="">Select a group…</option>
             {groups.map((g) => <option key={g.id} value={g.id}>{g.title || 'Untitled group'}</option>)}
           </select>
+        )}
+
+        {needsValue && condition.target.kind === 'built-in' && (condition.target.field === 'title' || condition.target.field === 'private_note') && (
+          <input data-testid="condition-value-input" value={condition.value ?? ''} onChange={(e) => onChange({ value: e.target.value })} placeholder="Value" className={FIELD + ' flex-1'} />
+        )}
+
+        {needsValue && condition.target.kind === 'built-in' && condition.target.field === 'row_color' && (
+          <div data-testid="condition-value-swatches" className="flex flex-wrap gap-1 flex-1">
+            {CUE_COLORS.filter((c): c is string => !!c).map((c) => (
+              <button
+                key={c}
+                data-testid={`condition-color-swatch-${c}`}
+                onClick={() => onChange({ value: c })}
+                style={{ background: c, border: `1.5px solid ${condition.value === c ? '#eef0f3' : 'transparent'}` }}
+                className="w-5 h-5 rounded-sm"
+                title={c}
+              />
+            ))}
+          </div>
         )}
 
         {needsValue && condition.target.kind === 'column' && targetColumn?.col_type === 'dropdown' && (

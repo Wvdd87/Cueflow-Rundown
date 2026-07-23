@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Users, Copy, Check, Trash2, Plus, Power, ChevronUp, Pencil } from 'lucide-react'
+import { Users, Copy, Check, Trash2, Plus, Power, ChevronUp, Pencil, Loader2 } from 'lucide-react'
 import { FIELD, BTN_PRIMARY, BTN_SECONDARY, ROW_TILE } from './dialogStyles'
 import {
   listCollabLinks,
@@ -251,6 +251,11 @@ export function CollabLinksSection({ rundownId, columns, open }: CollabLinksSect
       </p>
 
       <div className="space-y-3 max-h-80 overflow-y-auto">
+        {loading && (
+          <div className="flex items-center gap-2 text-sm text-[#7c7e8a]">
+            <Loader2 className="w-4 h-4 animate-spin" /> Loading collaboration links…
+          </div>
+        )}
         {links.length === 0 && !loading && (
           <p className="text-sm text-[#5a5c66] italic">No collaboration links yet.</p>
         )}

@@ -396,7 +396,7 @@ export function RundownHeader({
                 <LayoutTemplate className="w-3.5 h-3.5 text-[#9ba0ab]" /> Save as template
               </DropdownMenuItem>
               <DropdownMenuItem data-testid="share-menu-item" onClick={() => setShareOpen(true)} className={MENU_ITEM}>
-                <Share2 className="w-3.5 h-3.5 text-[#9ba0ab]" /> Share (read-only link)
+                <Share2 className="w-3.5 h-3.5 text-[#9ba0ab]" /> Share
               </DropdownMenuItem>
             </>
           )}

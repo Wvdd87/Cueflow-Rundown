@@ -417,9 +417,10 @@ export function RundownEditor({
   // doesn't re-run every active rule on every keystroke.
   const debouncedTimedCues = useDebouncedValue(timedCues, 300)
   const debouncedCells = useDebouncedValue(cells, 300)
+  const debouncedPrivateNotes = useDebouncedValue(privateNotes, 300)
   const ruleResults = useMemo(
-    () => evaluateRules(rules, debouncedTimedCues, columns, debouncedCells),
-    [rules, debouncedTimedCues, columns, debouncedCells]
+    () => evaluateRules(rules, debouncedTimedCues, columns, debouncedCells, debouncedPrivateNotes),
+    [rules, debouncedTimedCues, columns, debouncedCells, debouncedPrivateNotes]
   )
   const groups = useMemo(
     () => cues.filter((c) => c.cue_type === 'heading').map((h) => ({ id: h.id, title: h.title })),

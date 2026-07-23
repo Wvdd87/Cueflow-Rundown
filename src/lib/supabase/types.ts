@@ -22,7 +22,7 @@ export interface CellAttachment {
 
 // ── Conditional rules (stored in rundowns.rules) ──
 
-export type RuleBuiltInField = 'not_final' | 'cue_type' | 'has_no_script' | 'group' | 'duration' | 'start_time'
+export type RuleBuiltInField = 'not_final' | 'cue_type' | 'has_no_script' | 'group' | 'duration' | 'start_time' | 'title' | 'private_note' | 'row_color'
 
 /** What a condition inspects: a user-defined column, or a built-in cue property. */
 export type RuleConditionTarget =
@@ -50,15 +50,11 @@ export interface RuleCondition {
 
 export interface RuleAction {
   id: string
-  type: 'set_background_color' | 'set_text_color' | 'add_badge'
+  type: 'set_background_color' | 'set_text_color' | 'set_not_final'
   /** For set_background_color / set_text_color. */
   color?: string
   /** For set_background_color only — lets the rule win over a manually-set row color. */
   overrideManualColor?: boolean
-  /** For add_badge — a single emoji glyph. */
-  badgeIcon?: string
-  /** For add_badge — shown as the badge's tooltip. */
-  badgeLabel?: string
 }
 
 export interface RundownRule {

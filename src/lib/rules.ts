@@ -50,8 +50,13 @@ export const GROUP_OPERATORS: { value: RuleOperator; label: string }[] = [
   { value: 'in_any_group', label: 'Is in any group' },
   { value: 'in_group', label: 'Is in a specific group' },
 ]
+export const ROW_COLOR_OPERATORS: { value: RuleOperator; label: string }[] = [
+  { value: 'is', label: 'Is' },
+  { value: 'is_not', label: 'Is not' },
+  { value: 'is_empty', label: 'Has no color' },
+  { value: 'is_not_empty', label: 'Has any color' },
+]
 
-export const BADGE_ICON_PRESET = ['⚠️', '🔴', '🟡', '🟢', '🔵', '⭐', '🚩', '❗', '✅', '🔥']
 export const RULE_TEXT_COLORS = ['#eef0f3', '#f0a838', '#ff5a73', '#18d986', '#5aa0e6', '#a855f7']
 
 export function operatorsFor(target: RuleConditionTarget, columns: Column[]): { value: RuleOperator; label: string }[] {
@@ -66,6 +71,9 @@ export function operatorsFor(target: RuleConditionTarget, columns: Column[]): { 
     case 'group': return GROUP_OPERATORS
     case 'duration': return DURATION_OPERATORS
     case 'start_time': return START_TIME_OPERATORS
+    case 'title':
+    case 'private_note': return TEXT_OPERATORS
+    case 'row_color': return ROW_COLOR_OPERATORS
     default: return []
   }
 }
@@ -78,28 +86,39 @@ export function targetFromKey(key: string): RuleConditionTarget {
   return { kind: 'built-in', field: key.slice('built-in:'.length) as RuleBuiltInField }
 }
 
-export interface RuleBadge {
-  icon: string
-  label: string
-}
-
 export interface RuleRowResult {
   backgroundColor: string | null
   textColor: string | null
-  badges: RuleBadge[]
+  /** A rule flagged this row as not-final (visual only, never persisted). */
+  notFinal: boolean
 }
 
-const emptyResult = (): RuleRowResult => ({ backgroundColor: null, textColor: null, badges: [] })
+const emptyResult = (): RuleRowResult => ({ backgroundColor: null, textColor: null, notFinal: false })
 
 function textValue(raw: string): string {
   return stripHtml(raw ?? '').trim()
+}
+
+function matchText(text: string, operator: RuleOperator, value: string): boolean {
+  const needle = value.toLowerCase()
+  switch (operator) {
+    case 'contains': return text.toLowerCase().includes(needle)
+    case 'not_contains': return !text.toLowerCase().includes(needle)
+    case 'starts_with': return text.toLowerCase().startsWith(needle)
+    case 'ends_with': return text.toLowerCase().endsWith(needle)
+    case 'is_empty': return text === ''
+    case 'is_not_empty': return text !== ''
+    case 'is_exactly': return text === value
+    default: return false
+  }
 }
 
 function evaluateCondition(
   cond: RuleCondition,
   cue: CueTimingOutput,
   columns: Column[],
-  cells: Record<string, string>
+  cells: Record<string, string>,
+  privateNotes: Record<string, string>
 ): boolean {
   const { target, operator, value = '', valueMax = '' } = cond
 
@@ -121,22 +140,25 @@ function evaluateCondition(
       }
     }
 
-    const text = textValue(raw)
-    const needle = value.toLowerCase()
-    switch (operator) {
-      case 'contains': return text.toLowerCase().includes(needle)
-      case 'not_contains': return !text.toLowerCase().includes(needle)
-      case 'starts_with': return text.toLowerCase().startsWith(needle)
-      case 'ends_with': return text.toLowerCase().endsWith(needle)
-      case 'is_empty': return text === ''
-      case 'is_not_empty': return text !== ''
-      case 'is_exactly': return text === value
-      default: return false
-    }
+    return matchText(textValue(raw), operator, value)
   }
 
   // Built-in cue-level properties
   switch (target.field) {
+    case 'title':
+      return matchText(textValue(cue.title ?? ''), operator, value)
+    case 'private_note':
+      return matchText(textValue(privateNotes[cue.id] ?? ''), operator, value)
+    case 'row_color': {
+      const color = cue.background_color
+      switch (operator) {
+        case 'is': return color === value
+        case 'is_not': return color !== value
+        case 'is_empty': return !color
+        case 'is_not_empty': return !!color
+        default: return false
+      }
+    }
     case 'not_final':
       return operator === 'is_true' ? cue.not_final === true : operator === 'is_false' ? cue.not_final === false : false
     case 'has_no_script': {
@@ -177,13 +199,13 @@ function evaluateCondition(
   }
 }
 
-function matchesRule(rule: RundownRule, cue: CueTimingOutput, columns: Column[], cells: Record<string, string>): boolean {
+function matchesRule(rule: RundownRule, cue: CueTimingOutput, columns: Column[], cells: Record<string, string>, privateNotes: Record<string, string>): boolean {
   if (rule.conditions.length === 0) return false
-  const results = rule.conditions.map((c) => evaluateCondition(c, cue, columns, cells))
+  const results = rule.conditions.map((c) => evaluateCondition(c, cue, columns, cells, privateNotes))
   return rule.conditionLogic === 'OR' ? results.some(Boolean) : results.every(Boolean)
 }
 
-function applyAction(action: RuleAction, rule: RundownRule, cue: CueTimingOutput, res: RuleRowResult, decided: { bg: boolean; text: boolean }) {
+function applyAction(action: RuleAction, cue: CueTimingOutput, res: RuleRowResult, decided: { bg: boolean; text: boolean }) {
   if (action.type === 'set_background_color' && !decided.bg) {
     decided.bg = true
     const manual = cue.background_color
@@ -191,8 +213,8 @@ function applyAction(action: RuleAction, rule: RundownRule, cue: CueTimingOutput
   } else if (action.type === 'set_text_color' && !decided.text) {
     decided.text = true
     res.textColor = action.color ?? null
-  } else if (action.type === 'add_badge') {
-    res.badges.push({ icon: action.badgeIcon || '⚠️', label: action.badgeLabel || rule.label })
+  } else if (action.type === 'set_not_final') {
+    res.notFinal = true
   }
 }
 
@@ -204,7 +226,8 @@ export function evaluateRules(
   rules: RundownRule[],
   cues: CueTimingOutput[],
   columns: Column[],
-  cells: Record<string, string>
+  cells: Record<string, string>,
+  privateNotes: Record<string, string> = {}
 ): Map<string, RuleRowResult> {
   const result = new Map<string, RuleRowResult>()
   const activeRules = rules.filter((r) => r.active)
@@ -214,10 +237,10 @@ export function evaluateRules(
     const res = emptyResult()
     const decided = { bg: false, text: false }
     for (const rule of activeRules) {
-      if (!matchesRule(rule, cue, columns, cells)) continue
-      for (const action of rule.actions) applyAction(action, rule, cue, res, decided)
+      if (!matchesRule(rule, cue, columns, cells, privateNotes)) continue
+      for (const action of rule.actions) applyAction(action, cue, res, decided)
     }
-    if (res.backgroundColor || res.textColor || res.badges.length > 0) result.set(cue.id, res)
+    if (res.backgroundColor || res.textColor || res.notFinal) result.set(cue.id, res)
   }
   return result
 }
