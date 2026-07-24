@@ -23,6 +23,10 @@ interface RichNoteCellProps {
   textColor?: string
   placeholder?: string
   testId?: string
+  /** In the admin grid this is the cell's focus state — two-stage interaction
+   *  (#77): a single click edits only when the cell is already focused. Left
+   *  undefined outside the grid (shared view) where a single click still edits. */
+  cellFocused?: boolean
 }
 
 const isEmptyHtml = (html: string) => !html || html === '<p></p>'
@@ -34,6 +38,7 @@ export function RichNoteCell({
   textColor = '#e8c98a',
   placeholder = 'Private note…',
   testId,
+  cellFocused,
 }: RichNoteCellProps) {
   const [editing, setEditing] = useState(false)
 
@@ -43,6 +48,9 @@ export function RichNoteCell({
         initialContent={value}
         accent={accent}
         placeholder={placeholder}
+        // In the grid the outer cell focus ring is the border (#76); elsewhere
+        // (shared view) keep the editor's own bordered box.
+        bordered={cellFocused === undefined}
         onSave={(html) => {
           setEditing(false)
           if (html !== value) onSave(html)
@@ -54,10 +62,12 @@ export function RichNoteCell({
   const empty = isEmptyHtml(value)
   const cls = 'tiptap-cell w-full min-h-[28px] px-2 py-1 text-[13px] cursor-text break-words [overflow-wrap:anywhere] leading-[1.4]'
   const style = { color: empty ? '#5a5c66' : textColor, fontStyle: empty ? ('italic' as const) : ('normal' as const) }
+  const startEditing = () => setEditing(true)
+  const clickToEdit = () => { if (cellFocused === undefined || cellFocused) setEditing(true) }
 
   if (empty) {
     return (
-      <div data-testid={testId} data-cell-trigger onClick={() => setEditing(true)} className={cls} style={style}>
+      <div data-testid={testId} data-cell-trigger onClick={clickToEdit} onDoubleClick={startEditing} className={cls} style={style}>
         {placeholder}
       </div>
     )
@@ -66,7 +76,8 @@ export function RichNoteCell({
     <div
       data-testid={testId}
       data-cell-trigger
-      onClick={() => setEditing(true)}
+      onClick={clickToEdit}
+      onDoubleClick={startEditing}
       className={cls}
       style={style}
       dangerouslySetInnerHTML={{ __html: value }}
@@ -79,11 +90,13 @@ function NoteTipTap({
   accent,
   placeholder,
   onSave,
+  bordered = true,
 }: {
   initialContent: string
   accent: string
   placeholder: string
   onSave: (html: string) => void
+  bordered?: boolean
 }) {
   const wrapperRef = useRef<HTMLDivElement>(null)
   const savedRef = useRef(false)
@@ -150,9 +163,13 @@ function NoteTipTap({
       }}
     >
       <BubbleTipTapToolbar editor={editor as Editor} />
-      <div className="bg-[#0a0a0d] border" style={{ borderColor: accent }}>
+      {bordered ? (
+        <div className="bg-[#0a0a0d] border" style={{ borderColor: accent }}>
+          <EditorContent editor={editor} />
+        </div>
+      ) : (
         <EditorContent editor={editor} />
-      </div>
+      )}
     </div>
   )
 }

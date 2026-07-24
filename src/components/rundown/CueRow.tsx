@@ -505,8 +505,9 @@ export function CueRow({
           data-col-id="start"
           data-cell-trigger
           style={{ ...tile(CF.start, { flexDirection: 'column', justifyContent: 'flex-start', alignItems: 'flex-start', gap: 2, cursor: isHard || isFirst ? 'text' : 'default', position: 'relative' }), ...ringStyle('start') }}
-          onClick={() => (isHard || isFirst) && startStartEdit()}
-          title={isHard ? 'Hard start — click to edit time' : isFirst ? 'Show start (anchor) — click to edit' : 'Soft start — derived from the previous cue'}
+          onClick={() => { if ((isHard || isFirst) && focusedColId === 'start') startStartEdit() }}
+          onDoubleClick={() => (isHard || isFirst) && startStartEdit()}
+          title={isHard ? 'Hard start — click to select, again to edit' : isFirst ? 'Show start (anchor) — click to select, again to edit' : 'Soft start — derived from the previous cue'}
         >
           {editingStart ? (
             <input
@@ -553,7 +554,8 @@ export function CueRow({
           data-col-id="dur"
           data-cell-trigger
           style={{ ...tile(CF.dur, { flexDirection: 'column', justifyContent: 'flex-start', alignItems: 'flex-start', gap: 1, cursor: 'text', position: 'relative' }), ...ringStyle('dur') }}
-          onClick={() => !editingDuration && !(isActive && live) && startDurationEdit()}
+          onClick={() => { if (!editingDuration && !(isActive && live) && focusedColId === 'dur') startDurationEdit() }}
+          onDoubleClick={() => !editingDuration && !(isActive && live) && startDurationEdit()}
         >
           {editingDuration ? (
             <>
@@ -657,6 +659,7 @@ export function CueRow({
                   initialContent={cells[`${cue.id}:${col.id}`] ?? ''}
                   onContentChange={onCellChange}
                   getSuggestions={getFieldSuggestions ? (q) => getFieldSuggestions(col.id, q) : undefined}
+                  cellFocused={focusedColId === col.id}
                 />
               )}
             </div>
@@ -692,8 +695,9 @@ export function CueRow({
           ) : (
             <button
               data-cell-trigger
-              onClick={() => setEditingTitle(true)}
-              className="text-[16px] font-medium text-left w-full leading-[1.35] break-words [overflow-wrap:anywhere] transition-colors"
+              onClick={() => { if (focusedColId === 'title') setEditingTitle(true) }}
+              onDoubleClick={() => setEditingTitle(true)}
+              className="text-[16px] font-medium text-left w-full leading-[1.35] break-words [overflow-wrap:anywhere] transition-colors cursor-text hover:bg-[#1d1d24]/40"
               style={{ color: cue.title ? ct.hi : ((effectiveBg || ruleResult?.textColor) ? ct.mid : '#6b6d78') }}
             >
               {cue.title
@@ -712,7 +716,8 @@ export function CueRow({
             />
           ) : cue.subtitle ? (
             <button
-              onClick={() => setEditingSubtitle(true)}
+              onClick={() => { if (focusedColId === 'title') setEditingSubtitle(true) }}
+              onDoubleClick={() => setEditingSubtitle(true)}
               className="text-xs text-left w-full break-words [overflow-wrap:anywhere] mt-0.5 leading-[1.3] transition-colors"
               style={{ color: ct.mid }}
             >
@@ -720,7 +725,8 @@ export function CueRow({
             </button>
           ) : (
             <button
-              onClick={() => setEditingSubtitle(true)}
+              onClick={() => { if (focusedColId === 'title') setEditingSubtitle(true) }}
+              onDoubleClick={() => setEditingSubtitle(true)}
               className="text-xs text-left w-full mt-0.5 italic opacity-0 group-hover/title:opacity-100 transition-opacity"
               style={{ color: (effectiveBg || ruleResult?.textColor) ? ct.mid : '#5a5c66' }}
             >
@@ -760,6 +766,7 @@ export function CueRow({
                     cueId={cue.id}
                     value={privateNote}
                     onChange={onPrivateNoteChange}
+                    cellFocused={focusedColId === PRIVATE_NOTES_ID}
                   />
                 </div>
               )
@@ -793,6 +800,7 @@ export function CueRow({
                     initialContent={cells[`${cue.id}:${col.id}`] ?? ''}
                     onContentChange={onCellChange}
                     getSuggestions={getFieldSuggestions ? (q) => getFieldSuggestions(col.id, q) : undefined}
+                    cellFocused={focusedColId === col.id}
                   />
                 )}
               </div>

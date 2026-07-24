@@ -8,9 +8,10 @@ interface PrivateNoteCellProps {
   cueId: string
   value: string
   onChange: (cueId: string, content: string) => void
+  cellFocused?: boolean
 }
 
-export function PrivateNoteCell({ cueId, value, onChange }: PrivateNoteCellProps) {
+export function PrivateNoteCell({ cueId, value, onChange, cellFocused }: PrivateNoteCellProps) {
   const { actions } = useRundownData()
   const handleSave = useCallback(
     (html: string) => {
@@ -20,5 +21,5 @@ export function PrivateNoteCell({ cueId, value, onChange }: PrivateNoteCellProps
     [cueId, onChange, actions]
   )
 
-  return <RichNoteCell value={value} onSave={handleSave} textColor="#c8c9d0" testId="private-note-cell" />
+  return <RichNoteCell value={value} onSave={handleSave} textColor="#c8c9d0" testId="private-note-cell" cellFocused={cellFocused} />
 }

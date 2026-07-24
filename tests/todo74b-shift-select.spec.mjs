@@ -19,7 +19,7 @@ const editable = () => page.evaluate(() => !!document.activeElement?.isContentEd
 
 async function fillCol(rowIdx, text) {
   const cell = page.locator('[data-cue-id]').nth(rowIdx).getByTestId('richtext-cell').first()
-  await cell.click()
+  await cell.dblclick() // two-stage (#77): double-click to edit
   await page.waitForFunction(() => !!document.activeElement?.isContentEditable, null, { timeout: 5000 })
   await page.keyboard.type(text)
   await page.mouse.click(700, 8)
@@ -69,10 +69,10 @@ try {
   await page.keyboard.press('Shift+ArrowUp'); await page.waitForTimeout(200)
   check((await selText()) === '', 'shift+arrow extend does NOT create a native text selection')
 
-  // Regression: a plain click still edits a filled cell
+  // Regression: a filled cell can still be edited (two-stage: double-click)
   await page.mouse.click(700, 8); await page.waitForTimeout(200)
-  await c0.click(); await page.waitForTimeout(400)
-  check(await editable(), 'plain click on a filled cell still enters edit mode')
+  await c0.dblclick(); await page.waitForTimeout(400)
+  check(await editable(), 'double-click on a filled cell enters edit mode')
 
   console.log(`\nRESULT: ${pass} passed, ${fail} failed`)
 } catch (e) {

@@ -20,17 +20,18 @@ page.on('pageerror', (e) => console.log('  [pageerror]', e.message))
 const editable = () => page.evaluate(() => !!document.activeElement?.isContentEditable)
 
 async function fillAndReclick(locator, text, label) {
-  await locator().click()
+  // Two-stage (#77): double-click to enter edit mode directly.
+  await locator().dblclick()
   await page.waitForFunction(() => !!document.activeElement?.isContentEditable, null, { timeout: 5000 })
   await page.keyboard.type(text)
   await page.waitForTimeout(300)
   await page.mouse.click(700, 8) // blur -> save + render as filled display
   await page.waitForTimeout(600)
   log(`${label} filled with`, JSON.stringify(await locator().innerText()))
-  // Re-click the now-filled cell — must enter edit mode (not just grid focus).
-  await locator().click()
+  // Re-open the now-filled cell (double-click) — must enter edit mode.
+  await locator().dblclick()
   await page.waitForTimeout(500)
-  check(await editable(), `${label}: clicking a FILLED cell enters edit mode`)
+  check(await editable(), `${label}: double-clicking a FILLED cell enters edit mode`)
   await page.mouse.click(700, 8)
   await page.waitForTimeout(300)
 }

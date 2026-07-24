@@ -14,7 +14,7 @@ page.on('pageerror', (e) => console.log('  [pageerror]', e.message))
 
 async function editTitle(rowIdx, text) {
   const row = page.locator('[data-cue-id]').nth(rowIdx)
-  await row.locator('[data-col-id="title"] [data-cell-trigger]').first().click()
+  await row.locator('[data-col-id="title"] [data-cell-trigger]').first().dblclick()
   await page.waitForFunction(() => !!document.activeElement?.isContentEditable, null, { timeout: 5000 })
   await page.waitForTimeout(150)
   await page.keyboard.type(text)
@@ -53,7 +53,7 @@ try {
   await editTitle(0, 'VIDEO Intro Reel')
   await page.mouse.click(700, 8); await page.waitForTimeout(400)
   const row0 = page.locator('[data-cue-id]').nth(0)
-  await row0.getByTestId('richtext-cell').first().click(); await page.waitForTimeout(300)
+  await row0.getByTestId('richtext-cell').first().dblclick(); await page.waitForTimeout(300)
   await page.keyboard.type('Camera Left')
   await page.waitForTimeout(300)
   await page.mouse.click(700, 8); await page.waitForTimeout(500)
@@ -64,7 +64,7 @@ try {
 
   // ---- #71.1 title autocomplete: type "VIDEO" in cue 2 title -> suggestion appears ----
   const row1 = page.locator('[data-cue-id]').nth(1)
-  await row1.locator('[data-col-id="title"] [data-cell-trigger]').first().click()
+  await row1.locator('[data-col-id="title"] [data-cell-trigger]').first().dblclick()
   await page.waitForFunction(() => !!document.activeElement?.isContentEditable, null, { timeout: 5000 })
   const titleFocus = await page.evaluate(() => !!document.activeElement?.isContentEditable)
   check(titleFocus, '#71.1 title editor focused (contenteditable) on click')
@@ -88,7 +88,7 @@ try {
   check(/VIDEO Intro Reel/i.test(row1Title), '#71.1 accepting a suggestion filled the title')
 
   // ---- #71.1 column autocomplete: type "Cam" in cue 2 Camera cell ----
-  await row1.getByTestId('richtext-cell').first().click(); await page.waitForTimeout(300)
+  await row1.getByTestId('richtext-cell').first().dblclick(); await page.waitForTimeout(300)
   const colFocus = await page.evaluate(() => !!document.activeElement?.isContentEditable)
   check(colFocus, '#74 cue2 custom-column cell focuses on click (contenteditable)')
   await page.keyboard.type('Cam')

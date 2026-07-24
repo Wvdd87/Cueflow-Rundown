@@ -47,6 +47,9 @@ interface RichTextCellProps {
   onContentChange: (cueId: string, columnId: string, content: string) => void
   /** Field-value autocomplete provider for this column (#71.1). */
   getSuggestions?: (query: string) => Suggestion[]
+  /** Two-stage interaction (#77): a single click only edits when the cell is
+   *  already the focused cell; otherwise it just selects. Double-click always edits. */
+  cellFocused?: boolean
 }
 
 export function RichTextCell({
@@ -56,6 +59,7 @@ export function RichTextCell({
   initialContent,
   onContentChange,
   getSuggestions,
+  cellFocused,
 }: RichTextCellProps) {
   const { mentions, variables, trackSave, actions, collab } = useRundownData()
   const locked = !!collab && !collab.editableColumns.includes(columnId)
@@ -101,13 +105,17 @@ export function RichTextCell({
 
   const isEmpty = !content || content === '<p></p>'
   const startEditing = locked ? undefined : () => setEditing(true)
+  // Two-stage (#77): a single click edits only when the cell is already focused;
+  // otherwise the click just selects it. Double-click always edits.
+  const clickToEdit = locked ? undefined : () => { if (cellFocused) setEditing(true) }
 
   if (isEmpty) {
     return (
       <div
         data-testid="richtext-cell"
         data-cell-trigger={locked ? undefined : true}
-        onClick={startEditing}
+        onClick={clickToEdit}
+        onDoubleClick={startEditing}
         className={cn(
           'tiptap-cell w-full min-h-[28px] px-2 py-1 text-sm text-[#c8c9d0] break-words',
           locked ? 'opacity-70' : 'cursor-text hover:bg-[#1d1d24]/40'
@@ -123,7 +131,8 @@ export function RichTextCell({
       html={content}
       variableMap={variableMap}
       mentionMap={mentionMap}
-      onClick={startEditing}
+      onClick={clickToEdit}
+      onDoubleClick={startEditing}
       locked={locked}
     />
   )
@@ -155,12 +164,14 @@ function CellDisplay({
   variableMap,
   mentionMap,
   onClick,
+  onDoubleClick,
   locked,
 }: {
   html: string
   variableMap: Record<string, string>
   mentionMap: Record<string, Mention>
   onClick?: () => void
+  onDoubleClick?: () => void
   locked?: boolean
 }) {
   const [hover, setHover] = useState<{ mention: Mention; x: number; y: number } | null>(
@@ -214,6 +225,7 @@ function CellDisplay({
         data-lightbox="1"
         data-cell-trigger={locked ? undefined : true}
         onClick={handleClick}
+        onDoubleClick={onDoubleClick}
         onMouseOver={handleMouseMove}
         onMouseMove={handleMouseMove}
         onMouseLeave={() => setHover(null)}
