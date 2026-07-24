@@ -15,8 +15,6 @@ import {
   Italic,
   List,
   ListOrdered,
-  Image as ImageIcon,
-  Paperclip,
   ChevronDown,
   Highlighter,
   RemoveFormatting,
@@ -463,10 +461,10 @@ function CellTipTap({
       }}
     >
       <BubbleTipTapToolbar editor={editor} />
-      <div className="border border-[#f0a838] bg-[#0a0a0d]">
-        <EditorContent editor={editor} />
-        <FileToolbar onFiles={handleFiles} />
-      </div>
+      {/* No inner border/box or file toolbar (#76): the outer cell's focus ring
+          is the only border, matching the title column. Rich-text formatting is
+          still available via the selection bubble toolbar. */}
+      <EditorContent editor={editor} />
       <CellSuggestions
         suggestions={suggestions}
         highlighted={highlighted}
@@ -482,60 +480,6 @@ function CellTipTap({
   )
 }
 
-// ─── File upload toolbar (always visible in edit mode) ────────────────────────
-
-function FileToolbar({ onFiles }: { onFiles: (files: File[]) => void }) {
-  const imageInputRef = useRef<HTMLInputElement>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
-
-  const btnCls = 'p-1 text-[#7c7e8a] hover:text-[#c8c9d0] hover:bg-[#1d1d24] transition-colors'
-
-  return (
-    <div className="flex items-center gap-0.5 px-1 py-0.5 border-t border-[#2e2e38]">
-      <button
-        type="button"
-        data-testid="cell-image-btn"
-        onMouseDown={(e) => { e.preventDefault(); imageInputRef.current?.click() }}
-        className={btnCls}
-        title="Insert image"
-      >
-        <ImageIcon className="w-3.5 h-3.5" />
-      </button>
-      <input
-        ref={imageInputRef}
-        type="file"
-        accept="image/*"
-        multiple
-        hidden
-        onChange={(e) => {
-          const files = Array.from(e.target.files ?? [])
-          if (files.length) onFiles(files)
-          e.target.value = ''
-        }}
-      />
-      <button
-        type="button"
-        data-testid="cell-file-btn"
-        onMouseDown={(e) => { e.preventDefault(); fileInputRef.current?.click() }}
-        className={btnCls}
-        title="Attach file (PDF, DOCX, CSV, video, audio)"
-      >
-        <Paperclip className="w-3.5 h-3.5" />
-      </button>
-      <input
-        ref={fileInputRef}
-        type="file"
-        multiple
-        hidden
-        onChange={(e) => {
-          const files = Array.from(e.target.files ?? [])
-          if (files.length) onFiles(files)
-          e.target.value = ''
-        }}
-      />
-    </div>
-  )
-}
 
 // ─── Bubble toolbar (appears above text selection) ────────────────────────────
 

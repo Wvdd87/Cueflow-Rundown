@@ -686,7 +686,7 @@ export function CueRow({
               onSave={saveTitleHtml}
               selectAllOnFocus={selectTitleOnFocus}
               getSuggestions={getFieldSuggestions ? (q) => getFieldSuggestions('title', q) : undefined}
-              editorClassName="tiptap-cell focus:outline-none w-full text-[15px] font-medium border-b border-[#f0a838]"
+              editorClassName="tiptap-cell focus:outline-none w-full text-[15px] font-medium"
               className="w-full"
             />
           ) : (
@@ -707,7 +707,7 @@ export function CueRow({
               initialContent={cue.subtitle ?? ''}
               onSave={saveSubtitleHtml}
               getSuggestions={getFieldSuggestions ? (q) => getFieldSuggestions('subtitle', q) : undefined}
-              editorClassName="tiptap-cell focus:outline-none w-full text-xs border-b border-[#3a3a48] mt-0.5"
+              editorClassName="tiptap-cell focus:outline-none w-full text-xs mt-0.5"
               className="w-full mt-0.5"
             />
           ) : cue.subtitle ? (

@@ -36,7 +36,10 @@ try {
   await page.getByRole('button', { name: /add first cue/i }).click()
   await page.locator('[data-cue-id]').first().waitFor({ state: 'visible', timeout: 10000 })
   await page.waitForTimeout(400)
-  await page.locator('[data-testid="add-cue-btn"]').click()
+  for (let i = 0; i < 6 && (await page.locator('[data-cue-id]').count()) < 2; i++) {
+    await page.locator('[data-testid="add-cue-btn"]').click().catch(() => {})
+    await page.waitForTimeout(700)
+  }
   await page.waitForFunction(() => document.querySelectorAll('[data-cue-id]').length >= 2, null, { timeout: 10000 })
   await page.waitForTimeout(300)
   // custom column
