@@ -135,12 +135,19 @@ export function GroupHeaderRow({
       style={style}
       className="flex items-stretch"
       data-cue-id={heading.id}
+      onMouseDownCapture={(e) => {
+        if (e.shiftKey && !(e.target as HTMLElement).closest?.('[contenteditable="true"]')) e.preventDefault()
+      }}
       onClick={(e) => e.stopPropagation()}
       onClickCapture={(e) => {
+        const target = e.target as HTMLElement
+        if (target.closest?.('[contenteditable="true"]')) return
+        if (!target.closest('[data-col-id]')) return
+        if (e.shiftKey) { e.preventDefault(); e.stopPropagation() }
         // Defer focus to after the click dispatches — see the CueRow note (#74):
         // a synchronous focusedCell update swallows the bubble onClick that opens
         // the editor for a filled (dangerouslySetInnerHTML) heading title.
-        if ((e.target as HTMLElement).closest('[data-col-id]')) setTimeout(() => onCellFocus?.(heading.id, 'title'), 0)
+        setTimeout(() => onCellFocus?.(heading.id, 'title'), 0)
       }}
     >
       {/* Control gutter */}

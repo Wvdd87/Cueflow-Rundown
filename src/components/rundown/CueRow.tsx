@@ -298,16 +298,26 @@ export function CueRow({
       }}
       style={style}
       data-cue-id={cue.id}
+      onMouseDownCapture={(e) => {
+        // A shift-click extends the rectangular cell selection — stop the browser
+        // from starting a native text selection (which blue-highlights cell text).
+        // Leave clicks inside an open editor alone so in-cell text selection works.
+        if (e.shiftKey && !(e.target as HTMLElement).closest?.('[contenteditable="true"]')) e.preventDefault()
+      }}
       onClick={(e) => e.stopPropagation()}
       onClickCapture={(e) => {
-        const colId = (e.target as HTMLElement).closest('[data-col-id]')?.getAttribute('data-col-id')
+        const target = e.target as HTMLElement
+        if (target.closest?.('[contenteditable="true"]')) return // editing — leave focus/selection to the editor
+        const colId = target.closest('[data-col-id]')?.getAttribute('data-col-id')
         if (!colId) return
+        const shift = e.shiftKey
+        // Shift-click extends the selection only — don't also open the editor.
+        if (shift) { e.preventDefault(); e.stopPropagation() }
         // Defer the grid-focus state update to after this click finishes
         // dispatching. Setting focusedCell synchronously here re-renders the cell
         // mid-click and, for cells rendered via dangerouslySetInnerHTML (a filled
         // richtext cell), swallows the bubble onClick that starts editing — so a
         // click on a non-empty cell only set focus and never opened the editor (#74).
-        const shift = e.shiftKey
         setTimeout(() => onCellFocus?.(cue.id, colId, shift), 0)
       }}
     >

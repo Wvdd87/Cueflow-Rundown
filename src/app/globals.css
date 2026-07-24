@@ -229,6 +229,13 @@ select option {
   box-shadow: inset 0 0 0 1px rgba(240, 168, 56, 0.55);
   background-color: rgba(240, 168, 56, 0.08);
 }
+/* While a rectangular cell selection is active, suppress native text selection
+   so shift-select doesn't also blue-highlight the cell text. */
+.cf-no-select,
+.cf-no-select * {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
 /* Skeleton loading placeholders (rundown-open, etc.) */
 @keyframes cf-shimmer {
   0% {

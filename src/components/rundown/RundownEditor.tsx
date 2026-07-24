@@ -1454,16 +1454,24 @@ export function RundownEditor({
   })
 
   // Imperatively highlight the rectangular cell selection (avoids threading the
-  // range through every CueRow). Reapplied whenever the selection changes.
+  // range through every CueRow). Reapplied whenever the selection changes. While
+  // a multi-cell selection is active we also suppress native text selection and
+  // clear any stray range, so shift-select doesn't blue-highlight the cell text.
   useEffect(() => {
     const sel = gridNav.selectedCells
     if (sel.length <= 1) return
+    const cont = cueScrollRef.current
+    cont?.classList.add('cf-no-select')
+    window.getSelection()?.removeAllRanges()
     const els: HTMLElement[] = []
     for (const { cueId, colId } of sel) {
       const el = document.querySelector(`[data-row-id="${CSS.escape(cueId)}"][data-col-id="${CSS.escape(colId)}"]`) as HTMLElement | null
       if (el) { el.classList.add('cf-cell-selected'); els.push(el) }
     }
-    return () => { for (const el of els) el.classList.remove('cf-cell-selected') }
+    return () => {
+      cont?.classList.remove('cf-no-select')
+      for (const el of els) el.classList.remove('cf-cell-selected')
+    }
   }, [gridNav.selectedCells])
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
 
