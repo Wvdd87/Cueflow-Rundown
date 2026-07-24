@@ -64,7 +64,7 @@ export function FindReplacePanel({
     <div
       data-testid="find-replace-panel"
       onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); onClose() } }}
-      className="absolute right-4 top-3 z-30 w-[320px] bg-[#111116] border border-[#2e2e38] border-t-2 border-t-[#f0a838] shadow-xl p-3 space-y-2"
+      className="absolute right-4 top-3 z-40 w-[320px] bg-[#111116] border border-[#2e2e38] border-t-2 border-t-[#f0a838] shadow-xl p-3 space-y-2"
     >
       <div className="flex items-center justify-between">
         <p className="font-cond text-[10px] font-bold uppercase tracking-[0.14em] text-[#7c7e8a]">Find &amp; replace</p>
